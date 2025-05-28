@@ -59,7 +59,7 @@ Using `kube-apiserver overload` as an example:
 
 - Create kube-apiserver overload workflow:
 ```bash
-kubectl create -f rabc.yaml && kubectl create -f playbook/all-in-one-template.yaml && kubectl create -f playbook/workflow/apiserver-overload-scenario.yaml
+kubectl create -f playbook/rabc.yaml && kubectl create -f playbook/all-in-one-template.yaml && kubectl create -f playbook/workflow/apiserver-overload-scenario.yaml
 ```
 
 ![apiserver overload flowchart](./playbook/docs/chaos-flowchart-en.png)
