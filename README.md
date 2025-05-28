@@ -78,21 +78,23 @@ kubectl get workflow
 kubectl delete workflow {workflow-name}
 ```
 
-## Feature Roadmap
+## Roadmap
 
-| Supported Features               | Priority | Status      | Planned Release | Description                  |
-|----------------------------------|----------|-------------|-----------------|------------------------------|
-| apiserver overload         |   -      | Completed   |      -          | Simulate kube-apiserver high load |
-| etcd overload              |   -      | Completed   |      -          | Simulate etcd high load       |
-| coredns outage             |   -      | Completed   |      -          | Simulate coredns service outage |
-| kubernetes-proxy outage    |   -      | Completed   |      -          | Simulate kubernetes-proxy outage |
-| accidental deletion scenario     |  P0      | In Progress |  2025-05-30     | Simulate accidental resource deletion |
-| kube-apiserver outage      |  P0      | In Progress |  2025-06-15     | Simulate kube-apiserver outage |
-| etcd outage                | P0       | In Progress |  2025-06-15     | Simulate etcd cluster failure |
-| kube-scheduler outage      | P0       | In Progress |  2025-06-15     | Test scheduling behavior during scheduler failure |
-| kube-controller-manager outage   | P0       | In Progress |  2025-06-15     | Validate controller component failure scenarios |
-| cloud-controller-manager outage  | P0       | In Progress |  2025-06-15     | Validate controller component failure scenarios |
-| master node shutdown             | P1       | In Progress |  2025-06-15     | Simulate master node poweroff |
+| Supported Features                         | Priority | Status      | Planned Release | Description                                                     |
+|--------------------------------------------|----------|-------------|-----------------|-----------------------------------------------------------------|
+| apiserver overload                         |   -      | Completed   |      -          | Simulate kube-apiserver high load                               |
+| etcd overload                              |   -      | Completed   |      -          | Simulate etcd high load                                         |
+| apiserver overload (APF)                   |   -      | Completed   |      -          | Add Expensive List APF Policy,Simulate kube-apiserver high load |
+| etcd overload (ReadCache/Consistent cache) |   -      | Completed   |      -          | Add Etcd Overload Protect Policy, Simulate etcd high load       |
+| coredns outage                             |   -      | Completed   |      -          | Simulate coredns service outage                                 |
+| kubernetes-proxy outage                    |   -      | Completed   |      -          | Simulate kubernetes-proxy outage                                |
+| accidental deletion scenario               |  P0      | In Progress |  2025-05-30     | Simulate accidental resource deletion                           |
+| kube-apiserver outage                      |  P0      | In Progress |  2025-06-15     | Simulate kube-apiserver outage                                  |
+| etcd outage                                | P0       | In Progress |  2025-06-15     | Simulate etcd cluster failure                                   |
+| kube-scheduler outage                      | P0       | In Progress |  2025-06-15     | Test scheduling behavior during scheduler failure               |
+| kube-controller-manager outage             | P0       | In Progress |  2025-06-15     | Validate controller component failure scenarios                 |
+| cloud-controller-manager outage            | P0       | In Progress |  2025-06-15     | Validate controller component failure scenarios                 |
+| master node shutdown                       | P1       | In Progress |  2025-06-15     | Simulate master node poweroff                                   |
 
 ## FAQ
 1. Why use two clusters for fault simulation?
