@@ -1,0 +1,95 @@
+---
+# 功能说明：创建或删除apf配置和apf限流规则, 详见
+# https://doc.weixin.qq.com/doc/w3_ACYAlwbdAFwI8ImLq0SQcqldWe71Y?scode=AJEAIQdfAAoHwUzWGHAVoAPgaKAKk
+# apf详见: https://kubernetes.io/zh-cn/docs/reference/kubernetes-api/policy-resources/priority-level-configuration-v1/
+# 参数说明:
+#   apf-orchestrate参数说明:
+#     1. action: 操作类型，create/apply/delete
+#     2. kubeconfig-secret-name: 用于指定接入的K8s集群的kubeconfig凭证的secret名称, 如果为空，则默认为当前集群
+#     3. manifest: PriorityLevelConfiguration、FlowSchema的yaml配置
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: apf-orchestrate
+spec:
+  arguments:
+    parameters:
+    - name: user-agent
+      value: "kubestress"
+    # apf-orchestrate参数
+    - name: action
+      value: "apply"
+    - name: manifest
+      value: |
+        ---
+        apiVersion: flowcontrol.apiserver.k8s.io/v1
+        kind: PriorityLevelConfiguration
+        metadata:
+          annotations:
+            tke.cloud.tencent.com/objects-seats-rule: '{"objectsToSeats":[{"objects":1000,"seats":10},{"objects":10000,"seats":30},{"objects":20000,"seats":40},{"objects":50000,"seats":101}]}'
+          name: tke-chaos
+        spec:
+          limited:
+            limitResponse:
+              queuing:
+                handSize: 6
+                queueLengthLimit: 50
+                queues: 128
+              type: Queue
+            nominalConcurrencyShares: 1
+            borrowingLimitPercent: 0
+            lendablePercent: 0
+          type: Limited
+        ---
+        apiVersion: flowcontrol.apiserver.k8s.io/v1
+        kind: FlowSchema
+        metadata:
+          name: tke-chaos
+        spec:
+          distinguisherMethod:
+            type: ByUser
+          matchingPrecedence: 1
+          priorityLevelConfiguration:
+            name: tke-chaos
+          rules:
+          - resourceRules:
+            - apiGroups:
+              - '*'
+              clusterScope: true
+              namespaces:
+              - '*'
+              resources:
+              - 'pods'
+              - 'configmaps'
+              - 'secrets'
+              verbs:
+              - 'list'
+            subjects:
+            - userAgent:
+                nameRegexp: "^({{workflow.parameters.user-agent}}).*"
+              kind: UserAgent
+  entrypoint: apf-orchestrate
+  templates:
+  - name: apf-orchestrate
+    inputs:
+      parameters:
+      # kubectl-cmd参数
+      - name: action  # 操作类型，create/apply/delete
+        default: "apply"
+      - name: manifest  # 操作的yaml配置
+      - name: kubeconfig-secret-name   # 操作的集群kubeconfig secret名称, 当为空时, 则为incluster
+    dag:
+      tasks:
+      - name: kubectl-cmd
+        arguments:
+          parameters:
+          - name: action
+            value: "{{inputs.parameters.action}}"
+          - name: manifest
+            value: "{{inputs.parameters.manifest}}"
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+        templateRef:
+          name: kubectl-cmd
+          template: kubectl-mutating-cmd
+          clusterScope: true

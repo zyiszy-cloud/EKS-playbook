@@ -1,0 +1,19 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: create-etcd-protect-cm-
+spec:
+  entrypoint: etcd-protect-cm-orchestrate
+  arguments:
+    parameters:
+    - name: user-agent
+      value: "kubestress"
+    - name: action
+      value: "apply"
+    - name: kubeconfig-secret-name
+      value: ""
+  serviceAccountName: tke-chaos
+  workflowTemplateRef:
+    name: etcd-protect-cm-orchestrate
+    clusterScope: true

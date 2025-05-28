@@ -1,0 +1,26 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  labels:
+    kubernetes-proxy-disruption-scenario: "true"
+  generateName: kubernetes-proxy-disruption-scenario-
+spec:
+  entrypoint: main
+  serviceAccountName: tke-chaos
+  arguments:
+    parameters:
+    - name: disruption-duration
+      value: "30s"
+    - name: workload-type
+      value: "daemonset"
+    - name: workload-name
+      value: "kubernetes-proxy-disruption-scenario"
+    - name: workload-namespace
+      value: "default"
+    - name: kubeconfig-secret-name
+      value: ""
+  serviceAccountName: tke-chaos
+  workflowTemplateRef:
+    name: workload-disruption-template
+    clusterScope: true
