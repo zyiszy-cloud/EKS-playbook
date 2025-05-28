@@ -13,13 +13,13 @@ spec:
     - name: disruption-duration
       value: "30s"
     - name: workload-type
-      value: "daemonset"
+      value: "deployment"
     - name: workload-name
-      value: "kubernetes-proxy-disruption-scenario"
+      value: "kubernetes-proxy"
     - name: workload-namespace
       value: "default"
     - name: kubeconfig-secret-name
-      value: ""
+      value: "dest-cluster-kubeconfig"
   serviceAccountName: tke-chaos
   workflowTemplateRef:
     name: workload-disruption-template

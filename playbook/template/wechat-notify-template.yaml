@@ -8,7 +8,7 @@ kind: ClusterWorkflowTemplate
 metadata:
   name: wechat-notify-template
 spec:
-  entrypoint: notify-controller-plan-metrics
+  entrypoint: notify
   templates:
   - name: generate-apiserver-overload-test-message-then-notify
     inputs:

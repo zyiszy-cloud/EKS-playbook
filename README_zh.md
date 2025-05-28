@@ -101,7 +101,7 @@ kubectl delete worflow {workflow-name}
 ## 常见问题
 1. 为什么要用两个集群来执行演练测试?
 
-  演练是基于`Argo Workflow`工作流进行编排的，`Argo Workflow`是CRD的开发模式，强依赖`kube-apiserver`。如果使用一个集群进行炎凉，如进行apiserver/etcd高负载或停服实验时，`kube-apiserver`将不可用，这将导致`Argo Workflow Contrller`无法正常工作，整个工作流无法正常执行。
+  演练是基于`Argo Workflow`工作流进行编排的，`Argo Workflow`是CRD的开发模式，强依赖`kube-apiserver`。如果使用一个集群进行演练，如进行apiserver/etcd高负载或停服实验时，`kube-apiserver`将不可用，这将导致`Argo Workflow Contrller`无法正常工作，整个工作流无法正常执行。
 
 2. 演练开始执行后，如何知道演练执行到哪个步骤了?
 
