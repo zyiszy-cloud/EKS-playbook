@@ -1,0 +1,167 @@
+---
+# 功能说明: apiserver压测, 使用tke-chaos工具对apiserver发起大量洪泛list请求, 以检测apiserver的压力
+# 参数说明:
+#   inject-stress模版参数说明:
+#     1. image: 压测工具镜像
+#     2. namespace: list请求的namespace, 如果为空, 则默认不限制namespace
+#     3. object-type: list的资源, 支持pods, configmaps
+#     4. page-size: list是否分页, 默认值为0不分页
+#     5. num-clients: list的客户端数, 默认值为1
+#     6. qps: 每秒的请求数, 默认值为1
+#     7. total-duration: 总共持续多长时间, 默认值为30s
+#     8. from-cache: 是否从缓存中读取数据, 默认值为true, 如果为false, 则请求会击穿至etcd
+#     9. kubeconfig-secret-name: 用于指定接入的K8s集群的kubeconfig凭证的secret名称, 如果为空，则默认为当前集群
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: inject-stress-template
+spec:
+  entrypoint: inject-stress
+  templates:
+  - name: inject-stress
+    # inject-stress 参数
+    inputs:
+      parameters:
+      - name: image
+        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.1"
+        description: "压测工具镜像"
+      - name: namespace
+        default: ""
+        description: "list请求的namespace, 如果为空, 则默认不限制namespace"
+      - name: object-type
+        default: "pods"
+        description: "list的资源, 支持pods, configmaps"
+      - name: page-size
+        default: "0"
+        description: "list是否分页, 默认值为0不分页"
+      - name: num-clients
+        default: "10"
+        description: "list的客户端数, 默认值为1"
+      - name: qps
+        default: "1"
+        description: "每秒的请求数, 默认值为1"
+      - name: total-duration
+        default: "30s"
+        description: "总共持续多长时间, 默认值为30s"
+      - name: from-cache
+        default: "true"
+        description: "是否从缓存中读取数据, 默认值为true, 如果为false, 则请求会击穿至etcd"
+      - name: user-agent
+        default: "kubestress"
+        description: "list client UserAgent请求头, 默认值为kubestress"
+      - name: kubeconfig-secret-name
+        description: "用于指定接入的K8s集群的kubeconfig凭证的secret名称, 如果为空，则默认为当前集群"
+    steps:
+    - - name: internal-inject-stress
+        arguments:
+          parameters:
+          - name: image
+            value: "{{inputs.parameters.image}}"
+          - name: namespace
+            value: "{{inputs.parameters.namespace}}"
+          - name: object-type
+            value: "{{inputs.parameters.object-type}}"
+          - name: page-size
+            value: "{{inputs.parameters.page-size}}"
+          - name: num-clients
+            value: "{{inputs.parameters.num-clients}}"
+          - name: qps
+            value: "{{inputs.parameters.qps}}"
+          - name: total-duration
+            value: "{{inputs.parameters.total-duration}}"
+          - name: from-cache
+            value: "{{inputs.parameters.from-cache}}"
+          - name: user-agent
+            value: "{{inputs.parameters.user-agent}}"
+        template: internal-inject-stress
+        when: "'{{inputs.parameters.kubeconfig-secret-name}}' == ''"
+    - - name: external-inject-stress
+        arguments:
+          parameters:
+          - name: image
+            value: "{{inputs.parameters.image}}"
+          - name: namespace
+            value: "{{inputs.parameters.namespace}}"
+          - name: object-type
+            value: "{{inputs.parameters.object-type}}"
+          - name: page-size
+            value: "{{inputs.parameters.page-size}}"
+          - name: num-clients
+            value: "{{inputs.parameters.num-clients}}"
+          - name: qps
+            value: "{{inputs.parameters.qps}}"
+          - name: total-duration
+            value: "{{inputs.parameters.total-duration}}"
+          - name: from-cache
+            value: "{{inputs.parameters.from-cache}}"
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+          - name: user-agent
+            value: "{{inputs.parameters.user-agent}}"
+        template: external-inject-stress
+        when: "'{{inputs.parameters.kubeconfig-secret-name}}' != ''"
+
+  - name: internal-inject-stress
+    inputs:
+      parameters:
+      - name: image
+      - name: namespace
+      - name: object-type
+      - name: page-size
+      - name: num-clients
+      - name: qps
+      - name: total-duration
+      - name: from-cache
+      - name: user-agent
+    container:
+      image: "{{inputs.parameters.image}}"
+      command:
+      - /kubestress
+      - list
+      - --namespace={{inputs.parameters.namespace}}
+      - --object-type={{inputs.parameters.object-type}}
+      - --page-size={{inputs.parameters.page-size}}
+      - --num-clients={{inputs.parameters.num-clients}}
+      - --qps={{inputs.parameters.qps}}
+      - --total-duration={{inputs.parameters.total-duration}}
+      - --from-cache={{inputs.parameters.from-cache}}
+      - --user-agent={{inputs.parameters.user-agent}}
+
+  - name: external-inject-stress
+    inputs:
+      parameters:
+      - name: image
+      - name: namespace
+      - name: object-type
+      - name: page-size
+      - name: num-clients
+      - name: qps
+      - name: total-duration
+      - name: from-cache
+      - name: user-agent
+      - name: kubeconfig-secret-name
+    container:
+      image: "{{inputs.parameters.image}}"
+      command:
+      - /kubestress
+      - list
+      - --kubeconfig=/.kube/config
+      - --namespace={{inputs.parameters.namespace}}
+      - --object-type={{inputs.parameters.object-type}}
+      - --page-size={{inputs.parameters.page-size}}
+      - --num-clients={{inputs.parameters.num-clients}}
+      - --qps={{inputs.parameters.qps}}
+      - --total-duration={{inputs.parameters.total-duration}}
+      - --from-cache={{inputs.parameters.from-cache}}
+      - --user-agent={{inputs.parameters.user-agent}}
+      volumeMounts:
+      - name: kubeconfig
+        mountPath: "/.kube"
+        readOnly: true
+    volumes:
+    - name: kubeconfig
+      secret:
+        secretName: "{{inputs.parameters.kubeconfig-secret-name}}"
+        items:
+        - key: config
+          path: config

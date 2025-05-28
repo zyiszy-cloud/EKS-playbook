@@ -1,0 +1,134 @@
+# 工作流异常中断后或需要提前终止时，可使用如下命令进行工作负载恢复
+# 1. 如coredns deployment恢复
+#   kubectl scale deployment coredns -n kube-system --replicas=xxx
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: workload-disruption-template
+spec:
+  entrypoint: main
+  serviceAccountName: tke-chaos
+  templates:
+  - name: main
+    inputs:
+      parameters:
+      - name: disruption-duration
+        description: "服务中断持续时间"
+      - name: workload-type
+        description: "要测试的工作负载类型, 可选值: daemonset/deployment/statefulset"
+      - name: workload-name
+        description: "要测试的工作负载名称"
+      - name: workload-namespace
+        description: "工作负载所在命名空间"
+      - name: kubeconfig-secret-name
+        description: "测试remote cluster填该字段(选填)"
+    steps:
+    - - name: scale-down-workload
+        arguments:
+          parameters:
+          - name: workload-type
+            value: "{{inputs.parameters.workload-type}}"
+          - name: workload-name
+            value: "{{inputs.parameters.workload-name}}"
+          - name: workload-namespace
+            value: "{{inputs.parameters.workload-namespace}}"
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+        template: scale-down-workload
+    - - name: suspend-for-duration
+        arguments:
+          parameters:
+          - name: duration
+            value: "{{inputs.parameters.disruption-duration}}"
+        template: delay
+    - - name: scale-up-workload
+        arguments:
+          parameters:
+          - name: replicas
+            value: "{{steps.scale-down-workload.outputs.parameters.original-replicas}}"
+          - name: workload-type
+            value: "{{inputs.parameters.workload-type}}"
+          - name: workload-name
+            value: "{{inputs.parameters.workload-name}}"
+          - name: workload-namespace
+            value: "{{inputs.parameters.workload-namespace}}"
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+        template: scale-up-workload
+
+  - name: scale-down-workload
+    inputs:
+      parameters:
+      - name: workload-type
+      - name: workload-name
+      - name: workload-namespace
+      - name: kubeconfig-secret-name
+    dag:
+      tasks:
+      - name: scale-down-workload
+        arguments:
+          parameters:
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+          - name: source
+            value: |
+              if [ "{{inputs.parameters.workload-type}}" == "daemonset" ]; then
+                kubectl patch daemonset {{inputs.parameters.workload-name}} \
+                  -n {{inputs.parameters.workload-namespace}} \
+                  --type='json' \
+                  -p='[{"op": "add", "path": "/spec/template/spec/nodeSelector", "value": {"non-existing": "label"}}]'
+              else
+                kubectl get {{inputs.parameters.workload-type}} {{inputs.parameters.workload-name}} \
+                  -n {{inputs.parameters.workload-namespace}} \
+                  -o jsonpath='{.spec.replicas}'
+                kubectl scale {{inputs.parameters.workload-type}} {{inputs.parameters.workload-name}} \
+                  -n {{inputs.parameters.workload-namespace}} \
+                  --replicas=0 >/dev/null 2>&1
+              fi
+        templateRef:
+          name: kubectl-cmd
+          template: kubectl-script
+          clusterScope: true
+    outputs:
+      parameters:
+      - name: original-replicas
+        valueFrom:
+          parameter: "{{tasks.scale-down-workload.outputs.parameters.result}}"
+
+  - name: scale-up-workload
+    inputs:
+      parameters:
+      - name: replicas
+      - name: workload-type
+      - name: workload-name
+      - name: workload-namespace
+      - name: kubeconfig-secret-name
+    dag:
+      tasks:
+      - name: scale-up-workload
+        arguments:
+          parameters:
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+          - name: source
+            value: |
+              if [ "{{inputs.parameters.workload-type}}" == "daemonset" ]; then
+                kubectl rollout undo {{inputs.parameters.workload-type}} {{inputs.parameters.workload-name}} \
+                  -n {{inputs.parameters.workload-namespace}}
+              else
+                kubectl scale {{inputs.parameters.workload-type}} {{inputs.parameters.workload-name}} \
+                  -n {{inputs.parameters.workload-namespace}} \
+                  --replicas={{inputs.parameters.replicas}}
+              fi
+        templateRef:
+          name: kubectl-cmd
+          template: kubectl-script
+          clusterScope: true
+
+  - name: delay
+    inputs:
+      parameters:
+      - name: duration
+    suspend:
+      duration: "{{inputs.parameters.duration}}"

@@ -1,0 +1,142 @@
+---
+# 功能说明：在集群中创建资源，支持pods, configmaps
+# 参数说明:
+#   resource-archestrate模版参数说明:
+#     1. image: 创建资源使用的工具镜像
+#     2. namespace: 创建资源所在的命名空间
+#     3. object-type: 创建资源的类型, 支持pods/configmaps
+#     4. object-size-bytes: 创建资源的大小, 单位字节
+#     5. object-count: 创建资源的数量
+#     6. num-clients: 创建资源的客户端数量
+#     7. qps: 创建资源的QPS
+#     8. kubeconfig-secret-name: 用于指定接入的K8s集群的kubeconfig凭证的secret名称, 如果为空，则默认为当前集群
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: resource-archestrate
+spec:
+  entrypoint: resource-create
+  templates:
+  - name: resource-create
+    inputs:
+      parameters:
+      - name: image
+        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.1"
+        description: "创建资源使用的工具镜像"
+      - name: namespace
+        description: "创建资源所在的命名空间"
+      - name: object-type
+        default: "pods"
+        description: "创建资源的类型, 支持pods/configmaps"
+      - name: object-size-bytes
+        default: "10000"
+        description: "创建资源的大小, 单位字节"
+      - name: object-count
+        default: "100"
+        description: "创建资源的数量"
+      - name: num-clients
+        default: "10"
+        description: "创建资源的客户端数量"
+      - name: qps
+        default: "10"
+        description: "创建资源的QPS"
+      - name: kubeconfig-secret-name
+        description: "用于指定接入的K8s集群的kubeconfig凭证的secret名称, 如果为空，则默认为当前集群"
+    steps:
+    - - name: internal-resource-create
+        arguments:
+          parameters:
+          - name: image
+            value: "{{inputs.parameters.image}}"
+          - name: namespace
+            value: "{{inputs.parameters.namespace}}"
+          - name: object-type
+            value: "{{inputs.parameters.object-type}}"
+          - name: object-size-bytes
+            value: "{{inputs.parameters.object-size-bytes}}"
+          - name: object-count
+            value: "{{inputs.parameters.object-count}}"
+          - name: num-clients
+            value: "{{inputs.parameters.num-clients}}"
+          - name: qps
+            value: "{{inputs.parameters.qps}}"
+        template: internal-resource-create
+        when: "'{{inputs.parameters.kubeconfig-secret-name}}' == ''"
+    - - name: external-resource-create
+        arguments:
+          parameters:
+          - name: image
+            value: "{{inputs.parameters.image}}"
+          - name: namespace
+            value: "{{inputs.parameters.namespace}}"
+          - name: object-type
+            value: "{{inputs.parameters.object-type}}"
+          - name: object-size-bytes
+            value: "{{inputs.parameters.object-size-bytes}}"
+          - name: object-count
+            value: "{{inputs.parameters.object-count}}"
+          - name: num-clients
+            value: "{{inputs.parameters.num-clients}}"
+          - name: qps
+            value: "{{inputs.parameters.qps}}"
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+        template: external-resource-create
+        when: "'{{inputs.parameters.kubeconfig-secret-name}}' != ''"
+
+  - name: internal-resource-create
+    inputs:
+      parameters:
+      - name: image
+      - name: namespace
+      - name: object-type
+      - name: object-size-bytes
+      - name: object-count
+      - name: num-clients
+      - name: qps
+    container:
+      image: "{{inputs.parameters.image}}"
+      command:
+      - /kubestress
+      - create
+      - --namespace={{inputs.parameters.namespace}}
+      - --object-type={{inputs.parameters.object-type}}
+      - --object-size-bytes={{inputs.parameters.object-size-bytes}}
+      - --object-count={{inputs.parameters.object-count}}
+      - --num-clients={{inputs.parameters.num-clients}}
+      - --qps={{inputs.parameters.qps}}
+
+  - name: external-resource-create
+    inputs:
+      parameters:
+      - name: image
+      - name: namespace
+      - name: object-type
+      - name: object-size-bytes
+      - name: object-count
+      - name: num-clients
+      - name: qps
+      - name: kubeconfig-secret-name
+    container:
+      image: "{{inputs.parameters.image}}"
+      command:
+      - /kubestress
+      - create
+      - --kubeconfig=/.kube/config
+      - --namespace={{inputs.parameters.namespace}}
+      - --object-type={{inputs.parameters.object-type}}
+      - --object-size-bytes={{inputs.parameters.object-size-bytes}}
+      - --object-count={{inputs.parameters.object-count}}
+      - --num-clients={{inputs.parameters.num-clients}}
+      - --qps={{inputs.parameters.qps}}
+      volumeMounts:
+      - name: kubeconfig
+        mountPath: "/.kube"
+        readOnly: true
+    volumes:
+    - name: kubeconfig
+      secret:
+        secretName: "{{inputs.parameters.kubeconfig-secret-name}}"
+        items:
+        - key: config
+          path: config

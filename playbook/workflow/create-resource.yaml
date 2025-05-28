@@ -1,0 +1,29 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: create-resource-
+spec:
+  entrypoint: resource-create
+  arguments:
+    parameters:
+    - name: image
+      value: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.1"
+    - name: namespace
+      value: "tke-chaos-test-ns"
+    - name: object-type
+      value: "configmaps"
+    - name: object-size-bytes
+      value: "10000"
+    - name: object-count
+      value: "0"
+    - name: num-clients
+      value: "10"
+    - name: qps
+      value: "10"
+    - name: kubeconfig-secret-name
+      value: ""
+  serviceAccountName: tke-chaos
+  workflowTemplateRef:
+    name: resource-archestrate
+    clusterScope: true

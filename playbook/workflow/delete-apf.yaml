@@ -1,0 +1,19 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: delete-apf-
+spec:
+  entrypoint: apf-orchestrate
+  arguments:
+    parameters:
+    - name: user-agent
+      value: "kubestress"
+    - name: action
+      value: "delete"
+    - name: kubeconfig-secret-name
+      value: ""
+  serviceAccountName: tke-chaos
+  workflowTemplateRef:
+    name: apf-orchestrate
+    clusterScope: true
