@@ -55,7 +55,7 @@ kubectl exec -it -n tke-chaos-argo deployment/tke-chaos-argo-workflows-server --
 
 - 创建`kube-apiserver`高负载故障演练`workflow`：
 ```bash
-kubectl create -f rabc.yaml && kubectl create -f playbook/all-in-one-template.yaml && kubectl create -f playbook/workflow/apiserver-overload-scenario.yaml
+kubectl create -f playbook/rabc.yaml && kubectl create -f playbook/all-in-one-template.yaml && kubectl create -f playbook/workflow/apiserver-overload-scenario.yaml
 ```
 
 ![apiserver高负载演练流程图](./playbook/docs/chaos-flowchart-zh.png)
