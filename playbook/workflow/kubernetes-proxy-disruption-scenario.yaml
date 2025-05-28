@@ -4,7 +4,8 @@ kind: Workflow
 metadata:
   labels:
     kubernetes-proxy-disruption-scenario: "true"
-  generateName: kubernetes-proxy-disruption-scenario-
+  name: kubernetes-proxy-disruption-scenario
+  namespace: tke-chaos-test
 spec:
   entrypoint: main
   serviceAccountName: tke-chaos

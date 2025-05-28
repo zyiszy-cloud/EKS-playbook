@@ -11,7 +11,8 @@ kind: Workflow
 metadata:
   labels:
     apiserver-overload-scenario: "true"
-  generateName: apiserver-overload-scenario-
+  name: apiserver-overload-scenario
+  namespace: tke-chaos-test
 spec:
   entrypoint: main
   serviceAccountName: tke-chaos
@@ -43,7 +44,7 @@ spec:
     - name: precheck-configmap-name  # 前置检查检测的configmap名称
       value: "tke-chaos-precheck-resource"
     - name: precheck-configmap-namespace  # 前置检查检测的configmap命名空间
-      value: "default"
+      value: "tke-chaos-test"
     - name: precheck-pods-health-ratio  # 检测集群pods健康率, 0.9表示90%, 当pods健康率小于该值时, 将不允许测试
       value: "0.9"
     - name: precheck-nodes-health-ratio  # 集群节点健康率, 0.9表示90%, 当节点健康率小于该值时, 将不允许测试
@@ -53,7 +54,7 @@ spec:
     - name: resource-create-image  # 资源创建工具镜像
       value: "{{workflow.parameters.chaos-image}}"
     - name: resource-create-namespace  # 创建资源所在的命名空间
-      value: "tke-chaos-test-ns"
+      value: "tke-chaos-test"
     - name: resource-create-object-type  # 创建资源类型支持, pods/configmaps
       value: "pods"
     - name: resource-create-object-size-bytes  # 创建资源大小, 单位字节

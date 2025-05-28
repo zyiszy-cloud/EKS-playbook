@@ -28,7 +28,7 @@ spec:
         default: "tke-chaos-precheck-resource"
         description: "指定被演练集群中要检查的configmap名称"
       - name: check-configmap-namespace
-        default: "default"
+        default: "tke-chaos-test"
         description: "指定被演练集群中要检查的configmap所在的namespace"
       - name: pods-health-ratio
         default: "0.9"

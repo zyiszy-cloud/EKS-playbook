@@ -7,7 +7,7 @@
 **playbook**：`workflow/apiserver-overload-scenario.yaml`
 
 该场景构造`kube-apiserver`高负载，主要流程包括：
-- **演练校验**：对被演练的`目标集群`做健康检查，检查演练集群中的`Node`和`Pod`的健康比例，低于阈值将不允许演练，您可以通过修改`precheck-pods-health-ratio`和`precheck-nodes-health-ratio`参数调整阈值。同时会校验`目标集群`中是否存在`default/tke-chaos-precheck-resource ConfigMap`，如不存在将不允许演练。
+- **演练校验**：对被演练的`目标集群`做健康检查，检查演练集群中的`Node`和`Pod`的健康比例，低于阈值将不允许演练，您可以通过修改`precheck-pods-health-ratio`和`precheck-nodes-health-ratio`参数调整阈值。同时会校验`目标集群`中是否存在`tke-chaos-test/tke-chaos-precheck-resource ConfigMap`，如不存在将不允许演练。
 - **资源预热**：在集群中创建资源(`pods/configmaps`)，模拟现网环境资源规模。
 - **故障注入**：对apiserver发起洪泛`list pod/configmaps`请求，模拟`kube-apiserver`高负载压力。
 - **资源清理**：演练测试完成后清理演练过程中创建的资源。
