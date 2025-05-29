@@ -7,7 +7,7 @@
 **playbook**: `workflow/apiserver-overload-scenario.yaml`
 
 This scenario simulates high load on `kube-apiserver` with the following workflow:
-- **Pre-check**: Performs health checks on the target cluster, verifying the health ratio of Nodes and Pods. If below threshold, the test will be aborted. You can adjust thresholds via `precheck-pods-health-ratio` and `precheck-nodes-health-ratio` parameters. Also checks for existence of `default/tke-chaos-precheck-resource ConfigMap`.
+- **Pre-check**: Performs health checks on the target cluster, verifying the health ratio of Nodes and Pods. If below threshold, the test will be aborted. You can adjust thresholds via `precheck-pods-health-ratio` and `precheck-nodes-health-ratio` parameters. Also checks for existence of `tke-chaos-test/tke-chaos-precheck-resource ConfigMap`.
 - **Resource Warm-up**: Creates resources (`pods/configmaps`) to simulate production environment scale.
 - **Fault Injection**: Floods apiserver with `list pod/configmaps` requests to simulate high load.
 - **Cleanup**: Cleans up resources created during the test.

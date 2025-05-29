@@ -2,7 +2,8 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
-  generateName: create-resource-
+  name: create-resource
+  namespace: tke-chaos-test
 spec:
   entrypoint: resource-create
   arguments:
@@ -10,7 +11,7 @@ spec:
     - name: image
       value: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.1"
     - name: namespace
-      value: "tke-chaos-test-ns"
+      value: "tke-chaos-test"
     - name: object-type
       value: "configmaps"
     - name: object-size-bytes

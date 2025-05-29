@@ -4,7 +4,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: tke-chaos-argo-workflows-workflow-controller
-  namespace: "tke-chaos-argo"
+  namespace: "tke-chaos-test"
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-workflow-controller
@@ -19,7 +19,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: tke-chaos-argo-workflows-server
-  namespace: "tke-chaos-argo"
+  namespace: "tke-chaos-test"
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-server
@@ -34,7 +34,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: tke-chaos-argo-workflows-workflow-controller-configmap
-  namespace: "tke-chaos-argo"
+  namespace: "tke-chaos-test"
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-cm
@@ -3188,7 +3188,7 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: tke-chaos-argo-workflows-workflow-controller
-    namespace: "tke-chaos-argo"
+    namespace: "tke-chaos-test"
 ---
 # Source: argo-workflows/templates/controller/workflow-controller-crb.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -3210,7 +3210,7 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: tke-chaos-argo-workflows-workflow-controller
-    namespace: "tke-chaos-argo"
+    namespace: "tke-chaos-test"
 ---
 # Source: argo-workflows/templates/server/server-crb.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -3232,7 +3232,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: tke-chaos-argo-workflows-server
-  namespace: "tke-chaos-argo"
+  namespace: "tke-chaos-test"
 ---
 # Source: argo-workflows/templates/server/server-crb.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -3254,7 +3254,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: tke-chaos-argo-workflows-server
-  namespace: "tke-chaos-argo"
+  namespace: "tke-chaos-test"
 ---
 # Source: argo-workflows/templates/controller/workflow-role.yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -3292,7 +3292,7 @@ metadata:
     app: workflow-controller
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: argo-workflows
-  namespace: tke-chaos-argo
+  namespace: tke-chaos-test
 rules:
   - apiGroups:
       - argoproj.io
@@ -3338,7 +3338,7 @@ metadata:
     app: workflow-controller
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: argo-workflows
-  namespace: tke-chaos-argo
+  namespace: tke-chaos-test
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -3346,14 +3346,14 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: argo-workflow
-    namespace: tke-chaos-argo
+    namespace: tke-chaos-test
 ---
 # Source: argo-workflows/templates/server/server-service.yaml
 apiVersion: v1
 kind: Service
 metadata:
   name: tke-chaos-argo-workflows-server
-  namespace: "tke-chaos-argo"
+  namespace: "tke-chaos-test"
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-server
@@ -3378,7 +3378,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: tke-chaos-argo-workflows-workflow-controller
-  namespace: "tke-chaos-argo"
+  namespace: "tke-chaos-test"
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-workflow-controller
@@ -3466,7 +3466,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: tke-chaos-argo-workflows-server
-  namespace: "tke-chaos-argo"
+  namespace: "tke-chaos-test"
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-server

@@ -22,31 +22,34 @@
 
 **目标集群**
 
-2. 在`目标集群`中创建`default/tke-chaos-precheck-resource ConfigMap`，该资源用于标识`目标集群`可执行演练测试，同时在`目标集群`中创建`tke-chaos-test-ns namespace`
+2. 在`目标集群`中创建`tke-chaos-test/tke-chaos-precheck-resource ConfigMap`，该资源用于标识`目标集群`可执行演练测试。
 ```bash
-kubectl create -n default configmap tke-chaos-precheck-resource --from-literal=empty="" && kubectl create ns tke-chaos-test-ns
+kubectl create ns tke-chaos-test && kubectl create -n tke-chaos-test configmap tke-chaos-precheck-resource --from-literal=empty=""
 ```
 
 **源集群**
 
 3. 从腾讯云`TKE控制台`获取`目标集群`的内网接入`kubeconfig`凭证写入到`dest-cluster-kubeconfig`文件，并在`源集群`中执行如下命令创建`目标集群`的`kubeconfig`的`secret`
 ```bash
-kubectl create secret generic dest-cluster-kubeconfig --from-file=config=./dest-cluster-kubeconfig
+kubectl create ns tke-chaos-test && kubectl create -n tke-chaos-test secret generic dest-cluster-kubeconfig --from-file=config=./dest-cluster-kubeconfig
 ```
 
-4. 在`源集群`中部署`Argo Workflow`和演练模版（如`Argo`已部署，则不需要重复部署`Argo`，[**Argo Documentation**](https://argo-workflows.readthedocs.io/en/latest/)）
+4. 克隆本项目，并在`源集群`中部署`Argo Workflow`（如`Argo`已部署，则不需要重复部署`Argo`，[**Argo Documentation**](https://argo-workflows.readthedocs.io/en/latest/)）
 ```bash
+# 克隆项目
+git clone https://github.com/tkestack/tke-chaos-playbook.git && cd tke-chaos-playbook
+
 # 部署Argo Workflow
-kubectl create namespace tke-chaos-argo && kubectl create -f playbook/install-argo.yaml
+kubectl create -f playbook/install-argo.yaml
 
 # 验证Argo Workflow Pod正常运行
-kubectl get po -n tke-chaos-argo
+kubectl get po -n tke-chaos-test
 ```
 
-5. 腾讯云`TKE控制台`开启`tke-chaos-argo/tke-chaos-argo-workflows-server Service`公网访问，浏览器访问`LoadBalancer IP:2746`，执行如下命令获取的`Argo Server UI`接入凭证登录`Argo UI`，`Argo UI`可查看演练流程的详细信息。
+5. 腾讯云`TKE控制台`开启`tke-chaos-test/tke-chaos-argo-workflows-server Service`公网访问，浏览器访问`LoadBalancer IP:2746`，执行如下命令获取的`Argo Server UI`接入凭证登录`Argo UI`，`Argo UI`可查看演练流程的详细信息。
 ```bash
 # 获取Argo Server UI接入凭证
-kubectl exec -it -n tke-chaos-argo deployment/tke-chaos-argo-workflows-server -- argo auth token
+kubectl exec -it -n tke-chaos-test deployment/tke-chaos-argo-workflows-server -- argo auth token
 ```
 
 ![Argo Server UI](./playbook/docs/argo-server-ui.png)
@@ -68,7 +71,7 @@ kubectl create -f playbook/rabc.yaml && kubectl create -f playbook/all-in-one-te
 **核心流程说明**
 
 - **演练配置**：在开始执行演练前，您可能需要配置一些演练参数，如配置`webhook-url`参数配置企微群通知，参数均提供了默认值，您可以在不修改任何参数的情况下执行演练。各演练场景参数说明见[演练场景参数配置说明](playbook/README.md)
-- **演练前校验**：开始执行演练之前，会对`目标集群`做健康检查校验，检查演练集群中的`Node`和`Pod`的健康比例，低于阈值将不允许演练，您可以通过修改，`precheck-pods-health-ratio`和`precheck-nodes-health-ratio`参数调整阈值。同时会校验`目标集群`中是否存在`default/tke-chaos-precheck-resource ConfigMap`，如不存在将不允许演练。
+- **演练前校验**：开始执行演练之前，会对`目标集群`做健康检查校验，检查演练集群中的`Node`和`Pod`的健康比例，低于阈值将不允许演练，您可以通过修改，`precheck-pods-health-ratio`和`precheck-nodes-health-ratio`参数调整阈值。同时会校验`目标集群`中是否存在`tke-chaos-test/tke-chaos-precheck-resource ConfigMap`，如不存在将不允许演练。
 - **执行演练**：`kube-apiserver`高负载演练执行过程中，会对`目标集群`的`kube-apiserver`发起大量的洪泛`List Pod`请求，以模拟`kube-apiserver`高负载场景，您可以访问`腾讯云TKE控制台`的`目标集群`核心组件监控，查看`kube-apiserver`的负载情况。同时，您应该关注演练过程中您的业务Pod的健康状态，以验证`kube-apiserver`高负载是否会影响您的业务。
 - **演练结果**：您可以访问`Argo Server UI`查看演练结果（推荐），您也可以执行`kubectl describe workflow {workflow-name}`查看演练结果。
 
@@ -105,12 +108,12 @@ kubectl delete worflow {workflow-name}
 
 2. 演练开始执行后，如何知道演练执行到哪个步骤了?
 
-  您可以访问`Argo server UI`查看演练流程，您还可以执行`kubectl get workflow`查看工作流的执行状态。演练默认在default命名空间下执行，您还可以通过执行`kubectl get po -w`命令查看执行演练的`Pod`的执行情况，当出现`Error`状态的`Pod`时，大概率演练失败，您可以查看对应`Pod`日志进行排查。
+  您可以访问`Argo server UI`查看演练流程，您还可以执行`kubectl get -n tke-chaos-test workflow`查看工作流的执行状态。演练在`tke-chaos-test`命名空间下执行，您还可以通过执行`kubectl get -n tke-chaos-test po -w`命令查看执行演练的`Pod`的执行情况，当出现`Error`状态的`Pod`时，大概率演练失败，您可以查看对应`Pod`日志进行排查。
 
 3. 演练失败具体有哪些原因?
 
-  常见的错误包括如：执行演练的Pod`RBAC`权限不足问题、被测集群中用于校验的`default/tke-chaos-precheck-resource ConfigMap`不存在、被测集群中资源创建的`tke-chaos-test-ns namespace`不存在、`Argo workflow控制器`异常等。您可以排查演练`Pod`或`Argo Workflow Controller`的日志进行排查。
+  常见的错误包括如：执行演练的Pod`RBAC`权限不足问题、被测集群中用于校验的`tke-chaos-test/tke-chaos-precheck-resource ConfigMap`不存在、被测集群中资源创建的`tke-chaos-test namespace`不存在、`Argo workflow控制器`异常等。您可以排查演练`Pod`或`Argo Workflow Controller`的日志进行排查。
 
 4. `Argo Workflow Controller`异常排查?
 
-  当演练工作流创建后，通过`kubectl get workflow`查看工作流，工作流无状态时，此时大概率是`Argo workflow-controller`不工作，可以通过`kubectl logs -n tke-chaos-argo deployment/tke-chaos-argo-workflows-workflow-controller --tail 50 -f`查看`Argo Workflow Controller`的报错信息，很多情况下是RBAC权限不足，您应该修改对应的ClusterRole添加对应的资源权限。
+  当演练工作流创建后，通过`kubectl get workflow`查看工作流，工作流无状态时，此时大概率是`Argo workflow-controller`不工作，可以通过`kubectl logs -n tke-chaos-test deployment/tke-chaos-argo-workflows-workflow-controller --tail 50 -f`查看`Argo Workflow Controller`的报错信息，很多情况下是RBAC权限不足，您应该修改对应的ClusterRole添加对应的资源权限。

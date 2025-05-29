@@ -522,7 +522,7 @@ spec:
         default: "tke-chaos-precheck-resource"
         description: "指定被演练集群中要检查的configmap名称"
       - name: check-configmap-namespace
-        default: "default"
+        default: "tke-chaos-test"
         description: "指定被演练集群中要检查的configmap所在的namespace"
       - name: pods-health-ratio
         default: "0.9"
@@ -719,7 +719,7 @@ spec:
         default: "tke-chaos-precheck-resource"
         description: "前置检查检测的configmap名称"
       - name: check-configmap-namespace
-        default: "default"
+        default: "tke-chaos-test"
         description: "前置检查检测的configmap命名空间"
       - name: pods-health-ratio
         default: "0.9"
@@ -733,7 +733,7 @@ spec:
         default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.1"
         description: "资源创建工具镜像"
       - name: resource-create-namespace
-        default: "tke-chaos-test-ns"
+        default: "tke-chaos-test"
         description: "创建资源所在的命名空间"
       - name: resource-create-object-type
         default: "pods"
