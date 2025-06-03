@@ -58,7 +58,7 @@ Using `kube-apiserver overload` as an example:
 
 - Create kube-apiserver overload workflow:
 ```bash
-kubectl create -f playbook/rabc.yaml && kubectl create -f playbook/all-in-one-template.yaml && kubectl create -f playbook/workflow/apiserver-overload-scenario.yaml
+kubectl create -f playbook/rbac.yaml && kubectl create -f playbook/all-in-one-template.yaml && kubectl create -f playbook/workflow/apiserver-overload-scenario.yaml
 ```
 
 ![apiserver overload flowchart](./playbook/docs/chaos-flowchart-en.png)
@@ -85,7 +85,7 @@ kubectl delete workflow {workflow-name}
 | etcd overload              |   -      | Completed   |      -          | Simulate etcd high load       |
 | coredns outage             |   -      | Completed   |      -          | Simulate coredns service outage |
 | kubernetes-proxy outage    |   -      | Completed   |      -          | Simulate kubernetes-proxy outage |
-| accidental deletion scenario     |  P0      | In Progress |  2025-05-30     | Simulate accidental resource deletion |
+| accidental deletion scenario     |   -      | Completed |  -          | Simulate accidental resource deletion |
 | kube-apiserver outage      |  P0      | In Progress |  2025-06-15     | Simulate kube-apiserver outage |
 | etcd outage                | P0       | In Progress |  2025-06-15     | Simulate etcd cluster failure |
 | kube-scheduler outage      | P0       | In Progress |  2025-06-15     | Test scheduling behavior during scheduler failure |

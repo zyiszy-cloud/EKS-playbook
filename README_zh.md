@@ -58,7 +58,7 @@ kubectl exec -it -n tke-chaos-test deployment/tke-chaos-argo-workflows-server --
 
 - 创建`kube-apiserver`高负载故障演练`workflow`：
 ```bash
-kubectl create -f playbook/rabc.yaml && kubectl create -f playbook/all-in-one-template.yaml && kubectl create -f playbook/workflow/apiserver-overload-scenario.yaml
+kubectl create -f playbook/rbac.yaml && kubectl create -f playbook/all-in-one-template.yaml && kubectl create -f playbook/workflow/apiserver-overload-scenario.yaml
 ```
 
 ![apiserver高负载演练流程图](./playbook/docs/chaos-flowchart-zh.png)
@@ -66,7 +66,7 @@ kubectl create -f playbook/rabc.yaml && kubectl create -f playbook/all-in-one-te
 
 **核心流程说明**
 
-- **演练配置**：在开始执行演练前，您可能需要配置一些演练参数，如配置`webhook-url`参数配置企微群通知，参数均提供了默认值，您可以在不修改任何参数的情况下执行演练。各演练场景参数说明见[演练场景参数配置说明](playbook/README.md)
+- **演练配置**：在开始执行演练前，您可能需要配置一些演练参数，如配置`webhook-url`参数配置企微群通知，参数均提供了默认值，您可以在不修改任何参数的情况下执行演练。各演练场景参数说明见[演练场景参数配置说明](playbook/README_zh.md)
 - **演练前校验**：开始执行演练之前，会对`目标集群`做健康检查校验，检查演练集群中的`Node`和`Pod`的健康比例，低于阈值将不允许演练，您可以通过修改，`precheck-pods-health-ratio`和`precheck-nodes-health-ratio`参数调整阈值。同时会校验`目标集群`中是否存在`tke-chaos-test/tke-chaos-precheck-resource ConfigMap`，如不存在将不允许演练。
 - **执行演练**：`kube-apiserver`高负载演练执行过程中，会对`目标集群`的`kube-apiserver`发起大量的洪泛`List Pod`请求，以模拟`kube-apiserver`高负载场景，您可以访问`腾讯云TKE控制台`的`目标集群`核心组件监控，查看`kube-apiserver`的负载情况。同时，您应该关注演练过程中您的业务Pod的健康状态，以验证`kube-apiserver`高负载是否会影响您的业务。
 - **演练结果**：您可以访问`Argo Server UI`查看演练结果（推荐），您也可以执行`kubectl describe workflow {workflow-name}`查看演练结果。
@@ -86,7 +86,7 @@ kubectl delete worflow {workflow-name}
 | etcd高负载演练                   |   -   |      完成     |      -       | 模拟etcd服务高负载             |
 | coredns停服                     |   -   |      完成     |      -       | 模拟coredns服务中断场景        |
 | kubernetes-proxy停服            |   -   |      完成     |      -       | 模拟kubernetes-proxy服务中断场景 |
-| 资源误删除场景                    |  P0   |    开发中     |  2025-05-30  |     模拟资源被误删除场景        |
+| 资源误删除场景                    |   -   |      完成     |      -       |     模拟资源被误删除场景        |
 | kube-apiserver停服演练           |  P0   |    开发中     |  2025-06-15  | 模拟kube-apiserver服务中断场景 |
 | etcd停服演练                     | P0    |    开发中     |  2025-06-15  |      模拟etcd集群故障场景      |
 | kube-scheduler停服演练           | P0    |    开发中     |  2025-06-15  |  测试调度器故障期间的集群调度行为 |

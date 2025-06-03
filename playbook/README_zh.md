@@ -83,6 +83,23 @@
 | `disruption-duration` | `string` | `30s` | 服务中断持续时间(如30s，5m等) |
 | `kubeconfig-secret-name` | `string` | `dest-cluster-kubeconfig` | `目标集群kubeconfig secret`名称，如为空，则演练当前集群 |
 
+## 命名空间删除防护
+
+**playbook**：`workflow/namespace-delete-scenario.yaml`
+
+该场景测试腾讯云TKE集群的命名空间删除防护策略功能，主要流程包括：
+- **创建保护策略**：创建命名空间删除约束策略，防止删除包含 Pod 的命名空间
+- **创建测试资源**：创建测试命名空间 `tke-chaos-ns-76498` 和 Pod
+- **验证保护机制**：尝试删除包含 Pod 的命名空间，验证保护策略是否生效
+- **清理测试资源**：先删除 Pod 后再删除命名空间，最后移除保护策略
+
+**参数说明**
+| 参数名称 | 类型 | 默认值 | 说明 |
+|---------|------|--------|------|
+| `kubeconfig-secret-name` | `string` | `dest-cluster-kubeconfig` | 目标集群 kubeconfig secret 名称，如为空，则演练当前集群 |
+
+腾讯云TKE支持大量的资源防护策略，如`CRD`删除保护、`PV`删除保护等，您可以访问腾讯云官方文档以查看详细信息[策略管理](https://cloud.tencent.com/document/product/457/103179)
+
 ## TKE Master自维护集群kube-apiserver停服
 TODO
 

@@ -83,6 +83,23 @@ This scenario simulates kubernetes-proxy service disruption by:
 | `disruption-duration` | `string` | `30s` | Disruption duration (e.g. 30s, 5m) |
 | `kubeconfig-secret-name` | `string` | `dest-cluster-kubeconfig` | Target cluster kubeconfig secret name |
 
+## Namespace Deletion Protection
+
+**playbook**: `workflow/namespace-delete-scenario.yaml`
+
+This scenario tests Tencent Cloud TKE's namespace deletion block policy with the following workflow:
+- **Create namespace deletion block policy**: Create a namespace deletion constraint policy to prevent deletion of namespaces containing Pods
+- **Create test resources**: Creates test namespace `tke-chaos-ns-76498` and Pod
+- **Verify protection**: Attempts to delete namespace with Pod to verify protection works
+- **Cleanup**: Deletes Pod first, then namespace, and finally removes namespace deletion block policy
+
+**Parameters**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `kubeconfig-secret-name` | `string` | `dest-cluster-kubeconfig` | Target cluster kubeconfig secret name |
+
+Tencent Cloud TKE supports various resource protection policies, such as CRD deletion protection, PV deletion protection, etc. You can refer to the official Tencent Cloud documentation for more details: [Policy Management](https://cloud.tencent.com/document/product/457/103179)
+
 ## TKE Self-maintenance of Master cluster's kube-apiserver Disruption
 TODO
 
