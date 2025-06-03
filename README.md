@@ -1,4 +1,4 @@
-# Kubernetes Control Plane Chaos Testing Playbooks Guide
+# Kubernetes Chaos Testing Playbooks Guide
 
 [English](README.md) | [中文](README_zh.md)
 
@@ -10,7 +10,11 @@ Kubernetes' centralized architecture and declarative management model, while ena
 - Control plane overload: In a large OpenAI cluster, deploying a DaemonSet monitoring component triggered control plane failures and coredns overload. The coredns scaling depended on control plane recovery, affecting the data plane and causing global OpenAI service outages.
 - Data plane's strong dependency on control plane: In open-source Flink on Kubernetes scenarios, kube-apiserver outages may cause Flink task checkpoint failures and leader election anomalies. In severe cases, it may trigger abnormal exits of all existing task Pods, leading to complete data plane collapse and major incidents.
 
-These cases are not uncommon. The root cause lies in Kubernetes' architecture vulnerability chain - a single component failure or incorrect command can trigger global failures through centralized pathways. To proactively understand the impact duration and severity of control plane failures on services, we should conduct regular fault simulation and assessments to improve failure response capabilities, ensuring Kubernetes environment stability and reliability. This project provides Kubernetes chaos testing capabilities covering scenarios like node shutdown, accidental resource deletion, and control plane component (etcd, kube-apiserver, coredns, etc.) overload/outage.
+These cases are not uncommon. The root cause lies in Kubernetes' architecture vulnerability chain - a single component failure or incorrect command can trigger global failures through centralized pathways. 
+
+To proactively understand the impact duration and severity of control plane failures on services, we should conduct regular fault simulation and assessments to improve failure response capabilities, ensuring Kubernetes environment stability and reliability. 
+
+This project provides Kubernetes chaos testing capabilities covering scenarios like node shutdown, accidental resource deletion, and control plane component (etcd, kube-apiserver, coredns, etc.) overload/outage, it will help you minimize blast radius of cluster failures.
 
 ## Prerequisites
 
@@ -77,21 +81,23 @@ kubectl get workflow
 kubectl delete workflow {workflow-name}
 ```
 
-## Feature Roadmap
+## Roadmap
 
-| Supported Features               | Priority | Status      | Planned Release | Description                  |
-|----------------------------------|----------|-------------|-----------------|------------------------------|
-| apiserver overload         |   -      | Completed   |      -          | Simulate kube-apiserver high load |
-| etcd overload              |   -      | Completed   |      -          | Simulate etcd high load       |
-| coredns outage             |   -      | Completed   |      -          | Simulate coredns service outage |
-| kubernetes-proxy outage    |   -      | Completed   |      -          | Simulate kubernetes-proxy outage |
-| accidental deletion scenario     |   -      | Completed |  -          | Simulate accidental resource deletion |
-| kube-apiserver outage      |  P0      | In Progress |  2025-06-15     | Simulate kube-apiserver outage |
-| etcd outage                | P0       | In Progress |  2025-06-15     | Simulate etcd cluster failure |
-| kube-scheduler outage      | P0       | In Progress |  2025-06-15     | Test scheduling behavior during scheduler failure |
-| kube-controller-manager outage   | P0       | In Progress |  2025-06-15     | Validate controller component failure scenarios |
-| cloud-controller-manager outage  | P0       | In Progress |  2025-06-15     | Validate controller component failure scenarios |
-| master node shutdown             | P1       | In Progress |  2025-06-15     | Simulate master node poweroff |
+| Supported Features                         | Priority | Status      | Planned Release | Description                                                     |
+|--------------------------------------------|----------|-------------|-----------------|-----------------------------------------------------------------|
+| apiserver overload                         |   -      | Completed   |      -          | Simulate kube-apiserver high load                               |
+| etcd overload                              |   -      | Completed   |      -          | Simulate etcd high load                                         |
+| apiserver overload (APF)                   |   -      | Completed   |      -          | Add Expensive List APF Policy,Simulate kube-apiserver high load |
+| etcd overload (ReadCache/Consistent cache) |   -      | Completed   |      -          | Add Etcd Overload Protect Policy, Simulate etcd high load       |
+| coredns outage                             |   -      | Completed   |      -          | Simulate coredns service outage                                 |
+| kubernetes-proxy outage                    |   -      | Completed   |      -          | Simulate kubernetes-proxy outage                                |
+| accidental deletion scenario               |   -      | Completed   |      -          | Simulate accidental resource deletion                           |
+| kube-apiserver outage                      |  P0      | In Progress |  2025-06-15     | Simulate kube-apiserver outage                                  |
+| etcd outage                                | P0       | In Progress |  2025-06-15     | Simulate etcd cluster failure                                   |
+| kube-scheduler outage                      | P0       | In Progress |  2025-06-15     | Test scheduling behavior during scheduler failure               |
+| kube-controller-manager outage             | P0       | In Progress |  2025-06-15     | Validate controller component failure scenarios                 |
+| cloud-controller-manager outage            | P0       | In Progress |  2025-06-15     | Validate controller component failure scenarios                 |
+| master node shutdown                       | P1       | In Progress |  2025-06-15     | Simulate master node poweroff                                   |
 
 ## FAQ
 1. Why use two clusters for fault simulation?
