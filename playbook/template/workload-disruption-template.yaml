@@ -23,7 +23,29 @@ spec:
         description: "工作负载所在命名空间"
       - name: kubeconfig-secret-name
         description: "测试remote cluster填该字段(选填)"
+      - name: precheck-configmap-name
+        default: "tke-chaos-precheck-resource"
+        description: "预检查配置configmap名称"
+      - name: precheck-configmap-namespace
+        default: "tke-chaos-test"
+        description: "预检查配置configmap所在命名空间"
     steps:
+    - - name: precheck
+        arguments:
+          parameters:
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+          - name: precheck-configmap-name
+            value: "{{inputs.parameters.precheck-configmap-name}}"
+          - name: precheck-configmap-namespace
+            value: "{{inputs.parameters.precheck-configmap-namespace}}"
+          - name: source
+            value: |
+              kubectl get -n {{inputs.parameters.precheck-configmap-namespace}} configmap {{inputs.parameters.precheck-configmap-name}}
+        templateRef:
+          name: kubectl-cmd
+          template: kubectl-script
+          clusterScope: true
     - - name: scale-down-workload
         arguments:
           parameters:
@@ -36,12 +58,8 @@ spec:
           - name: kubeconfig-secret-name
             value: "{{inputs.parameters.kubeconfig-secret-name}}"
         template: scale-down-workload
-    - - name: suspend-for-duration
-        arguments:
-          parameters:
-          - name: duration
-            value: "{{inputs.parameters.disruption-duration}}"
-        template: delay
+    - - name: suspend
+        template: suspend
     - - name: scale-up-workload
         arguments:
           parameters:
@@ -126,9 +144,5 @@ spec:
           template: kubectl-script
           clusterScope: true
 
-  - name: delay
-    inputs:
-      parameters:
-      - name: duration
-    suspend:
-      duration: "{{inputs.parameters.duration}}"
+  - name: suspend
+    suspend: {}

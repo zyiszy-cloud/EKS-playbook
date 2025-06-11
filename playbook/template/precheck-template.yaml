@@ -22,7 +22,7 @@ spec:
     inputs:
       parameters:
       - name: image
-        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.1"
+        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.2"
         description: "precheck工具镜像, 用于校验集群健康状态"
       - name: check-configmap-name
         default: "tke-chaos-precheck-resource"

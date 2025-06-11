@@ -13,7 +13,7 @@ spec:
     parameters:
     # cluster-status-collect 参数
     - name: image
-      value: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.1"
+      value: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.2"
   entrypoint: cluster-status-collect
   templates:
   - name: cluster-status-collect
@@ -516,7 +516,7 @@ spec:
     inputs:
       parameters:
       - name: image
-        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.1"
+        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.2"
         description: "precheck工具镜像, 用于校验集群健康状态"
       - name: check-configmap-name
         default: "tke-chaos-precheck-resource"
@@ -713,7 +713,7 @@ spec:
 
       # precheck参数
       - name: precheck-cluster-image
-        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.1"
+        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.2"
         description: "前置检查工具镜像"
       - name: check-configmap-name
         default: "tke-chaos-precheck-resource"
@@ -730,7 +730,7 @@ spec:
 
       # 资源创建参数
       - name: resource-create-image
-        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.1"
+        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.2"
         description: "资源创建工具镜像"
       - name: resource-create-namespace
         default: "tke-chaos-test"
@@ -750,12 +750,12 @@ spec:
 
       # 集群状态采集参数
       - name: cluster-status-image
-        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.1"
+        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.2"
         description: "集群状态检查工具镜像"
 
       # 压测参数
       - name: inject-stress-image
-        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.1"
+        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.2"
         description: "故障注入工具镜像"
       - name: inject-stress-list-namespace
         default: ""
@@ -1185,7 +1185,7 @@ spec:
     inputs:
       parameters:
       - name: image
-        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.1"
+        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.2"
         description: "压测工具镜像"
       - name: namespace
         default: ""
@@ -1353,7 +1353,29 @@ spec:
         description: "工作负载所在命名空间"
       - name: kubeconfig-secret-name
         description: "测试remote cluster填该字段(选填)"
+      - name: precheck-configmap-name
+        default: "tke-chaos-precheck-resource"
+        description: "预检查配置configmap名称"
+      - name: precheck-configmap-namespace
+        default: "tke-chaos-test"
+        description: "预检查配置configmap所在命名空间"
     steps:
+    - - name: precheck
+        arguments:
+          parameters:
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+          - name: precheck-configmap-name
+            value: "{{inputs.parameters.precheck-configmap-name}}"
+          - name: precheck-configmap-namespace
+            value: "{{inputs.parameters.precheck-configmap-namespace}}"
+          - name: source
+            value: |
+              kubectl get -n {{inputs.parameters.precheck-configmap-namespace}} configmap {{inputs.parameters.precheck-configmap-name}}
+        templateRef:
+          name: kubectl-cmd
+          template: kubectl-script
+          clusterScope: true
     - - name: scale-down-workload
         arguments:
           parameters:
@@ -1366,12 +1388,8 @@ spec:
           - name: kubeconfig-secret-name
             value: "{{inputs.parameters.kubeconfig-secret-name}}"
         template: scale-down-workload
-    - - name: suspend-for-duration
-        arguments:
-          parameters:
-          - name: duration
-            value: "{{inputs.parameters.disruption-duration}}"
-        template: delay
+    - - name: suspend
+        template: suspend
     - - name: scale-up-workload
         arguments:
           parameters:
@@ -1456,12 +1474,8 @@ spec:
           template: kubectl-script
           clusterScope: true
 
-  - name: delay
-    inputs:
-      parameters:
-      - name: duration
-    suspend:
-      duration: "{{inputs.parameters.duration}}"
+  - name: suspend
+    suspend: {}
 
 ---
 # 功能说明：在集群中创建资源，支持pods, configmaps
@@ -1486,7 +1500,7 @@ spec:
     inputs:
       parameters:
       - name: image
-        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.1"
+        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.2"
         description: "创建资源使用的工具镜像"
       - name: namespace
         description: "创建资源所在的命名空间"

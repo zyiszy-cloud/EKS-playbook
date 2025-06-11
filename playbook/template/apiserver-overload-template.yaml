@@ -33,7 +33,7 @@ spec:
 
       # precheck参数
       - name: precheck-cluster-image
-        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.1"
+        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.2"
         description: "前置检查工具镜像"
       - name: check-configmap-name
         default: "tke-chaos-precheck-resource"
@@ -50,7 +50,7 @@ spec:
 
       # 资源创建参数
       - name: resource-create-image
-        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.1"
+        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.2"
         description: "资源创建工具镜像"
       - name: resource-create-namespace
         default: "tke-chaos-test"
@@ -70,12 +70,12 @@ spec:
 
       # 集群状态采集参数
       - name: cluster-status-image
-        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.1"
+        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.2"
         description: "集群状态检查工具镜像"
 
       # 压测参数
       - name: inject-stress-image
-        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.1"
+        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.2"
         description: "故障注入工具镜像"
       - name: inject-stress-list-namespace
         default: ""
