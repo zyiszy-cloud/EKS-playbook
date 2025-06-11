@@ -112,11 +112,51 @@ TODO
 ## TKE Master自维护集群kube-scheduler停服
 TODO
 
-## 托管集群kube-apiserver组件停服
-TODO
+## 托管集群master组件停服
 
-## 托管集群kube-controller-manager停服
-TODO
+**playbook**
+1. kube-apiserver停服&恢复：`workflow/managed-cluster-apiserver-shutdown-scenario.yaml`
+2. kube-controller-manager停服&恢复：`workflow/managed-cluster-controller-manager-shutdown-scenario.yaml`
+3. kube-scheduler停服&恢复：`workflow/managed-cluster-scheduler-shutdown-scenario.yaml`
 
-## 托管集群kube-scheduler停服
-TODO
+该场景通过腾讯云API对托管集群的`master`组件进行停服演练，主要流程包括：
+
+1. **前置检查**：验证目标集群中存在`tke-chaos-test/tke-chaos-precheck-resource ConfigMap`，确保集群可用于演练
+2. **组件停机**：登录argo Web UI，点击`suspend-1`节点`SUMMARY`标签下的`RESUME`按钮，调用腾讯云API停止`master`组件
+3. **状态验证**：延迟20秒后检查`master`状态，确保组件停机成功
+4. **业务验证**：`apiserver`停服期间，您可以去验证您的业务是否受到`apiserver`停服的影响
+5. **组件恢复**：点击`suspend-2`节点`SUMMARY`标签下的`RESUME`按钮，调用腾讯云API恢复`master`组件
+6. **最终验证**：延迟20秒后，再次检查组件状态确保恢复成功，演练结束
+
+**原子操作库**
+
+`workflow/managed-cluster-master-component/`目录下是`​Master`组件停服演练的原子操作库，专为命令行环境设计，提供独立、可逆的管控单元。每个`YAML`文件对应一个最小化操作动作​（如停服/恢复），无需依赖 UI 或复杂编排。
+
+若您的 Kubernetes 环境无法访问 Argo Web UI，可通过命令行直接调用原子化工作流执行组件演练。以`apiserver`停服演练为例，具体操作如下：
+
+1. apiserver组件停服
+```bash
+kubectl create -f workflow/managed-cluster-master-component/shutdown-apiserver.yaml
+```
+
+2. apiserver组件恢复
+```bash
+kubectl create -f workflow/managed-cluster-master-component/restore-apiserver.yaml
+```
+
+**参数说明**
+
+您需要修改演练`YAML`文件中`region`、`secret-id`、`secret-key`、`cluster-id`参数，参数说明如下：
+
+| 参数名称 | 类型 | 默认值 | 说明 |
+|---------|------|--------|------|
+| `region` | `string` | <REGION> | 腾讯云地域，如`ap-guangzhou` [地域查询](https://www.tencentcloud.com/zh/document/product/213/6091) |
+| `secret-id` | `string` | <SECRET_ID> | 腾讯云API密钥ID, 密钥可前往官网控制台 [API密钥管理](https://console.cloud.tencent.com/cam/capi) 进行获取 |
+| `secret-key` | `string` | <SECRET_KEY> | 腾讯云API密钥 |
+| `cluster-id` | `string` | <CLUSTER_ID> | 演练集群ID |
+| `kubeconfig-secret-name` | `string` | `dest-cluster-kubeconfig` | 目标集群kubeconfig secret名称 |
+
+**注意事项**
+
+2. 演练过程中会影响集群`master`组件服务可用性
+3. 建议在非生产环境或维护窗口期执行
