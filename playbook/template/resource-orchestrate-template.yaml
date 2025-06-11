@@ -21,7 +21,7 @@ spec:
     inputs:
       parameters:
       - name: image
-        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.1"
+        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.2"
         description: "创建资源使用的工具镜像"
       - name: namespace
         description: "创建资源所在的命名空间"

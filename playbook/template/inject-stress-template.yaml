@@ -23,7 +23,7 @@ spec:
     inputs:
       parameters:
       - name: image
-        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.1"
+        default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.2"
         description: "压测工具镜像"
       - name: namespace
         default: ""

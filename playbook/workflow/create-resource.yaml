@@ -9,7 +9,7 @@ spec:
   arguments:
     parameters:
     - name: image
-      value: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.1"
+      value: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.2"
     - name: namespace
       value: "tke-chaos-test"
     - name: object-type

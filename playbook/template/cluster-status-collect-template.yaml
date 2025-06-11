@@ -13,7 +13,7 @@ spec:
     parameters:
     # cluster-status-collect 参数
     - name: image
-      value: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.1"
+      value: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.2"
   entrypoint: cluster-status-collect
   templates:
   - name: cluster-status-collect

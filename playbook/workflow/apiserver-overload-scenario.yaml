@@ -22,7 +22,7 @@ spec:
     - name: enable-apiserver-overload  # apiserver-overload step 执行开关
       value: "true"
     - name: chaos-image
-      value: ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.1
+      value: ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.2
     - name: cluster-id  # 演练集群ID
       value: "未知"
     - name: enable-apf  # 是否启用apf限速
