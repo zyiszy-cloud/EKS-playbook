@@ -112,11 +112,48 @@ TODO
 ## TKE Self-maintenance of Master cluster's kube-scheduler Disruption
 TODO
 
-## Managed Cluster's kube-apiserver Disruption
-TODO
+## Managed Cluster Master Component Disruption
 
-## Managed Cluster's kube-controller-manager Disruption
-TODO
+**playbooks**:
+1. kube-apiserver disruption: `workflow/managed-cluster-apiserver-shutdown-scenario.yaml`
+2. kube-controller-manager disruption: `workflow/managed-cluster-controller-manager-shutdown-scenario.yaml` 
+3. kube-scheduler disruption: `workflow/managed-cluster-scheduler-shutdown-scenario.yaml`
 
-## Managed Cluster's kube-scheduler Disruption
-TODO
+This scenario tests the disruption of managed cluster master components via Tencent Cloud API with the following workflow:
+
+1. **Pre-check**: Verify the existence of `tke-chaos-test/tke-chaos-precheck-resource ConfigMap` in the target cluster to ensure the cluster is ready for testing
+2. **Component Shutdown**: Log in to Argo Web UI, click the `RESUME` button under the `SUMMARY` tab of the `suspend-1` node to call Tencent Cloud API for stopping the master component
+3. **Status Verification**: After a 20-second delay, check the master status to confirm successful shutdown
+4. **Business Verification**: During apiserver shutdown, verify business impact
+5. **Component Recovery**: Click the `RESUME` button under the `SUMMARY` tab of the `suspend-2` node to call Tencent Cloud API for restoring the master component
+6. **Final Verification**: After another 20-second delay, recheck the component status to confirm successful restoration, marking the end of the test
+
+**Atomic Operations Library**
+
+The `workflow/managed-cluster-master-component/` directory contains atomic operations for command-line environments. Each YAML file corresponds to a minimal operation (e.g. shutdown/recovery) without UI dependency.
+
+For Kubernetes environments without Argo Web UI access, execute component tests directly via CLI. Example for apiserver:
+
+1. apiserver shutdown:
+```bash
+kubectl create -f workflow/managed-cluster-master-component/shutdown-apiserver.yaml
+```
+
+2. apiserver recovery:
+```bash
+kubectl create -f workflow/managed-cluster-master-component/restore-apiserver.yaml
+```
+
+**Parameters**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `region` | `string` | <REGION> | Tencent Cloud region, e.g. `ap-guangzhou` [Region List](https://www.tencentcloud.com/document/product/213/6091?lang=en&pg=) |
+| `secret-id` | `string` | <SECRET_ID> | Tencent Cloud API secret ID, obtain from [API Key Management](https://console.cloud.tencent.com/cam/capi) |
+| `secret-key` | `string` | <SECRET_KEY> | Tencent Cloud API secret key |
+| `cluster-id` | `string` | <CLUSTER_ID> | Target cluster ID |
+| `kubeconfig-secret-name` | `string` | `dest-cluster-kubeconfig` | Secret name containing target cluster kubeconfig |
+
+**Notes**
+1. Will affect master component availability during test
+2. Recommended to execute in non-production environments or maintenance windows
