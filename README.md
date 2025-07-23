@@ -1,28 +1,46 @@
-# EKS/TKE Serverless Performance Testing Playbook
+# TKE Serverless Performance Testing Playbook
 
 [English](README.md) | [中文](README_zh.md)
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Kubernetes](https://img.shields.io/badge/Kubernetes-1.20+-blue.svg)](https://kubernetes.io/)
 [![TKE](https://img.shields.io/badge/TKE-Serverless-green.svg)](https://cloud.tencent.com/product/tke)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-1.20+-blue.svg)](https://kubernetes.io/)
 
-## 🚀 Overview
+## 🚀 Project Overview
 
-This project provides comprehensive performance testing capabilities for **Tencent Cloud TKE Serverless** (Elastic Kubernetes Service) and general Kubernetes chaos engineering scenarios. Built on Argo Workflow, it offers automated testing pipelines for evaluating and optimizing serverless container performance.
+This project provides a comprehensive performance testing solution specifically designed for **Tencent Cloud TKE Serverless** (Elastic Kubernetes Service). Built on Argo Workflow, it offers automated performance testing pipelines to help you evaluate and optimize serverless container performance.
 
-## ✨ Key Features
+### 🎯 Core Value
 
-### 🎯 TKE Serverless Performance Testing
-- **Pod Startup Performance**: Test pod startup speed across different specifications
-- **Auto-scaling Performance**: Evaluate HPA response time and stability
-- **Resource Optimization**: Analyze cost-performance ratios
-- **Automated Reporting**: Generate detailed performance reports
+- **Performance Benchmarking**: Establish performance baselines for TKE Serverless
+- **Automated Testing**: One-click execution of complete performance test suites
+- **Cost Optimization**: Optimize resource configuration and costs through performance data
+- **Production Ready**: Provide performance assurance for production environments
 
-### 🔥 Chaos Engineering Scenarios
-- **Control Plane Testing**: API server, etcd overload scenarios
-- **Component Disruption**: CoreDNS, kube-proxy service interruption
-- **Master Component Testing**: Managed cluster component shutdown/recovery
-- **Resource Protection**: Namespace deletion protection testing
+### ✨ Key Features
+
+#### 🏃‍♂️ Pod Startup Performance Testing
+- Multi-spec pod startup speed testing (0.25C/0.5Gi ~ 2C/4Gi)
+- Analysis of image size impact on startup time
+- Batch pod startup concurrency performance testing
+- Startup success rate and stability verification
+
+#### 📈 Auto-scaling Performance Testing
+- HPA auto-scaling response time testing
+- Auto scale-in testing after load reduction
+- Scale stability and oscillation analysis
+- Resource utilization optimization recommendations
+
+#### 🌐 Network Performance Testing (Planned)
+- Pod-to-pod communication latency testing
+- Service load balancing performance
+- Ingress throughput testing
+- External network access performance evaluation
+
+#### 💾 Storage Performance Testing (Planned)
+- PVC mount performance testing
+- I/O performance for different storage types
+- Data persistence verification
 
 ## 🏃‍♂️ Quick Start
 

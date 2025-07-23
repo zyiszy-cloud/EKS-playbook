@@ -11,17 +11,17 @@ metadata:
   labels:
     serverless-pod-startup-performance: "true"
   name: serverless-pod-startup-performance
-  namespace: tke-chaos-test
+  namespace: tke-serverless-test
 spec:
   entrypoint: main
-  serviceAccountName: tke-chaos
+  serviceAccountName: tke-serverless
   arguments:
     parameters:
     # 全局参数
     - name: chaos-image
       value: ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.2
     - name: kubeconfig-secret-name  # 目标集群接入kubeconfig的secret名称
-      value: "dest-cluster-kubeconfig"
+      value: "serverless-cluster-kubeconfig"
     - name: webhook-url  # 企业微信群webhook地址
       value: ""
     
@@ -57,12 +57,12 @@ spec:
           - name: kubeconfig-secret-name
             value: "{{workflow.parameters.kubeconfig-secret-name}}"
           - name: precheck-configmap-name
-            value: "tke-chaos-precheck-resource"
+            value: "tke-serverless-precheck-resource"
           - name: precheck-configmap-namespace
-            value: "tke-chaos-test"
+            value: "tke-serverless-test"
           - name: source
             value: |
-              kubectl get -n tke-chaos-test configmap tke-chaos-precheck-resource
+              kubectl get -n tke-serverless-test configmap tke-serverless-precheck-resource
         templateRef:
           name: kubectl-cmd
           template: kubectl-script

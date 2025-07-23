@@ -568,10 +568,10 @@ spec:
         default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.2"
         description: "precheck工具镜像, 用于校验集群健康状态"
       - name: check-configmap-name
-        default: "tke-chaos-precheck-resource"
+        default: "tke-serverless-precheck-resource"
         description: "指定被演练集群中要检查的configmap名称"
       - name: check-configmap-namespace
-        default: "tke-chaos-test"
+        default: "tke-serverless-test"
         description: "指定被演练集群中要检查的configmap所在的namespace"
       - name: pods-health-ratio
         default: "0.9"
@@ -765,10 +765,10 @@ spec:
         default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.2"
         description: "前置检查工具镜像"
       - name: check-configmap-name
-        default: "tke-chaos-precheck-resource"
+        default: "tke-serverless-precheck-resource"
         description: "前置检查检测的configmap名称"
       - name: check-configmap-namespace
-        default: "tke-chaos-test"
+        default: "tke-serverless-test"
         description: "前置检查检测的configmap命名空间"
       - name: pods-health-ratio
         default: "0.9"
@@ -782,7 +782,7 @@ spec:
         default: "ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.2"
         description: "资源创建工具镜像"
       - name: resource-create-namespace
-        default: "tke-chaos-test"
+        default: "tke-serverless-test"
         description: "创建资源所在的命名空间"
       - name: resource-create-object-type
         default: "pods"
@@ -1403,10 +1403,10 @@ spec:
       - name: kubeconfig-secret-name
         description: "测试remote cluster填该字段(选填)"
       - name: precheck-configmap-name
-        default: "tke-chaos-precheck-resource"
+        default: "tke-serverless-precheck-resource"
         description: "预检查配置configmap名称"
       - name: precheck-configmap-namespace
-        default: "tke-chaos-test"
+        default: "tke-serverless-test"
         description: "预检查配置configmap所在命名空间"
     steps:
     - - name: precheck

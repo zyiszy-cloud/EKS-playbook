@@ -53,31 +53,31 @@ check_prerequisites() {
     log_info "检查前置条件..."
     
     # 检查命名空间
-    if ! kubectl get namespace tke-chaos-test &> /dev/null; then
-        log_warning "tke-chaos-test命名空间不存在，正在创建..."
-        kubectl create namespace tke-chaos-test
+    if ! kubectl get namespace tke-serverless-test &> /dev/null; then
+        log_warning "tke-serverless-test命名空间不存在，正在创建..."
+        kubectl create namespace tke-serverless-test
     fi
     
     # 检查ConfigMap
-    if ! kubectl get configmap tke-chaos-precheck-resource -n tke-chaos-test &> /dev/null; then
+    if ! kubectl get configmap tke-serverless-precheck-resource -n tke-serverless-test &> /dev/null; then
         log_warning "前置检查ConfigMap不存在，正在创建..."
-        kubectl create -n tke-chaos-test configmap tke-chaos-precheck-resource --from-literal=empty=""
+        kubectl create -n tke-serverless-test configmap tke-serverless-precheck-resource --from-literal=ready="true"
     fi
     
     # 检查kubeconfig secret
-    if ! kubectl get secret dest-cluster-kubeconfig -n tke-chaos-test &> /dev/null; then
-        log_error "dest-cluster-kubeconfig secret不存在"
-        log_error "请先创建目标集群的kubeconfig secret:"
-        log_error "kubectl create -n tke-chaos-test secret generic dest-cluster-kubeconfig --from-file=config=./your-kubeconfig"
+    if ! kubectl get secret serverless-cluster-kubeconfig -n tke-serverless-test &> /dev/null; then
+        log_error "serverless-cluster-kubeconfig secret不存在"
+        log_error "请先创建TKE Serverless集群的kubeconfig secret:"
+        log_error "kubectl create -n tke-serverless-test secret generic serverless-cluster-kubeconfig --from-file=config=./serverless-kubeconfig"
         exit 1
     fi
     
     # 检查Argo Workflow
-    if ! kubectl get deployment tke-chaos-argo-workflows-workflow-controller -n tke-chaos-test &> /dev/null; then
+    if ! kubectl get deployment tke-serverless-argo-workflows-workflow-controller -n tke-serverless-test &> /dev/null; then
         log_warning "Argo Workflow未部署，正在部署..."
         kubectl create -f playbook/install-argo.yaml
         log_info "等待Argo Workflow就绪..."
-        kubectl wait --for=condition=available deployment/tke-chaos-argo-workflows-workflow-controller -n tke-chaos-test --timeout=300s
+        kubectl wait --for=condition=available deployment/tke-serverless-argo-workflows-workflow-controller -n tke-serverless-test --timeout=300s
     fi
     
     log_success "前置条件检查完成"
@@ -96,22 +96,22 @@ run_startup_test() {
     log_info "开始执行Pod启动性能测试..."
     
     # 清理之前的测试
-    kubectl delete workflow serverless-pod-startup-performance -n tke-chaos-test --ignore-not-found=true
+    kubectl delete workflow serverless-pod-startup-performance -n tke-serverless-test --ignore-not-found=true
     
     # 创建测试
     kubectl create -f playbook/workflow/serverless-pod-startup-performance.yaml
     
     log_info "测试已启动，工作流名称: serverless-pod-startup-performance"
     log_info "您可以通过以下方式监控测试进度:"
-    log_info "1. kubectl get workflow -n tke-chaos-test"
-    log_info "2. kubectl describe workflow serverless-pod-startup-performance -n tke-chaos-test"
+    log_info "1. kubectl get workflow -n tke-serverless-test"
+    log_info "2. kubectl describe workflow serverless-pod-startup-performance -n tke-serverless-test"
     log_info "3. 访问Argo UI查看详细进度"
     
     # 等待测试完成
     log_info "等待测试完成..."
-    kubectl wait --for=condition=Completed workflow/serverless-pod-startup-performance -n tke-chaos-test --timeout=1800s || {
+    kubectl wait --for=condition=Completed workflow/serverless-pod-startup-performance -n tke-serverless-test --timeout=1800s || {
         log_warning "测试可能仍在进行中或遇到问题，请检查工作流状态"
-        kubectl get workflow serverless-pod-startup-performance -n tke-chaos-test
+        kubectl get workflow serverless-pod-startup-performance -n tke-serverless-test
         return 1
     }
     
@@ -123,22 +123,22 @@ run_scaling_test() {
     log_info "开始执行弹性扩缩容性能测试..."
     
     # 清理之前的测试
-    kubectl delete workflow serverless-scaling-performance -n tke-chaos-test --ignore-not-found=true
+    kubectl delete workflow serverless-scaling-performance -n tke-serverless-test --ignore-not-found=true
     
     # 创建测试
     kubectl create -f playbook/workflow/serverless-scaling-performance.yaml
     
     log_info "测试已启动，工作流名称: serverless-scaling-performance"
     log_info "您可以通过以下方式监控测试进度:"
-    log_info "1. kubectl get workflow -n tke-chaos-test"
-    log_info "2. kubectl describe workflow serverless-scaling-performance -n tke-chaos-test"
+    log_info "1. kubectl get workflow -n tke-serverless-test"
+    log_info "2. kubectl describe workflow serverless-scaling-performance -n tke-serverless-test"
     log_info "3. kubectl get hpa -n tke-serverless-scaling-test -w"
     
     # 等待测试完成
     log_info "等待测试完成..."
-    kubectl wait --for=condition=Completed workflow/serverless-scaling-performance -n tke-chaos-test --timeout=2400s || {
+    kubectl wait --for=condition=Completed workflow/serverless-scaling-performance -n tke-serverless-test --timeout=2400s || {
         log_warning "测试可能仍在进行中或遇到问题，请检查工作流状态"
-        kubectl get workflow serverless-scaling-performance -n tke-chaos-test
+        kubectl get workflow serverless-scaling-performance -n tke-serverless-test
         return 1
     }
     
@@ -150,10 +150,10 @@ get_argo_ui_info() {
     log_info "获取Argo UI访问信息..."
     
     # 获取Service信息
-    SERVICE_TYPE=$(kubectl get service tke-chaos-argo-workflows-server -n tke-chaos-test -o jsonpath='{.spec.type}')
+    SERVICE_TYPE=$(kubectl get service tke-serverless-argo-workflows-server -n tke-serverless-test -o jsonpath='{.spec.type}')
     
     if [ "$SERVICE_TYPE" = "LoadBalancer" ]; then
-        EXTERNAL_IP=$(kubectl get service tke-chaos-argo-workflows-server -n tke-chaos-test -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+        EXTERNAL_IP=$(kubectl get service tke-serverless-argo-workflows-server -n tke-serverless-test -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
         if [ -n "$EXTERNAL_IP" ]; then
             log_info "Argo UI访问地址: http://$EXTERNAL_IP:2746"
         else
@@ -165,7 +165,7 @@ get_argo_ui_info() {
     
     # 获取访问token
     log_info "获取Argo UI访问token..."
-    TOKEN=$(kubectl exec -n tke-chaos-test deployment/tke-chaos-argo-workflows-server -- argo auth token 2>/dev/null || echo "获取token失败")
+    TOKEN=$(kubectl exec -n tke-serverless-test deployment/tke-serverless-argo-workflows-server -- argo auth token 2>/dev/null || echo "获取token失败")
     log_info "访问token: $TOKEN"
 }
 
@@ -175,11 +175,11 @@ show_results() {
     echo "=================================="
     
     # 显示工作流状态
-    kubectl get workflow -n tke-chaos-test -o wide
+    kubectl get workflow -n tke-serverless-test -o wide
     
     echo ""
     log_info "详细结果请查看:"
-    log_info "1. kubectl describe workflow <workflow-name> -n tke-chaos-test"
+    log_info "1. kubectl describe workflow <workflow-name> -n tke-serverless-test"
     log_info "2. 访问Argo UI查看详细日志和结果"
     log_info "3. 查看测试指南: cat playbook/TKE_SERVERLESS_PERFORMANCE_GUIDE.md"
 }
@@ -187,7 +187,7 @@ show_results() {
 # 清理测试资源
 cleanup() {
     log_info "清理测试资源..."
-    kubectl delete workflow --all -n tke-chaos-test --ignore-not-found=true
+    kubectl delete workflow --all -n tke-serverless-test --ignore-not-found=true
     kubectl delete namespace tke-serverless-perf-test --ignore-not-found=true
     kubectl delete namespace tke-serverless-scaling-test --ignore-not-found=true
     log_success "清理完成"
@@ -233,7 +233,7 @@ main() {
             exit 0
             ;;
         -s|--status)
-            kubectl get workflow -n tke-chaos-test -o wide
+            kubectl get workflow -n tke-serverless-test -o wide
             exit 0
             ;;
         --ui-info)

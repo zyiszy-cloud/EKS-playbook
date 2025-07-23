@@ -3,12 +3,12 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: tke-chaos-argo-workflows-workflow-controller
-  namespace: "tke-chaos-test"
+  name: tke-serverless-argo-workflows-workflow-controller
+  namespace: "tke-serverless-test"
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-workflow-controller
-    app.kubernetes.io/instance: tke-chaos
+    app.kubernetes.io/instance: tke-serverless
     app.kubernetes.io/component: workflow-controller
     app: workflow-controller
     app.kubernetes.io/managed-by: Helm
@@ -18,12 +18,12 @@ metadata:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: tke-chaos-argo-workflows-server
-  namespace: "tke-chaos-test"
+  name: tke-serverless-argo-workflows-server
+  namespace: "tke-serverless-test"
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-server
-    app.kubernetes.io/instance: tke-chaos
+    app.kubernetes.io/instance: tke-serverless
     app.kubernetes.io/component: server
     app: server
     app.kubernetes.io/managed-by: Helm
@@ -33,12 +33,12 @@ metadata:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: tke-chaos-argo-workflows-workflow-controller-configmap
-  namespace: "tke-chaos-test"
+  name: tke-serverless-argo-workflows-workflow-controller-configmap
+  namespace: "tke-serverless-test"
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-cm
-    app.kubernetes.io/instance: tke-chaos
+    app.kubernetes.io/instance: tke-serverless
     app.kubernetes.io/component: workflow-controller
     app: workflow-controller
     app.kubernetes.io/managed-by: Helm
@@ -2773,11 +2773,11 @@ spec:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: tke-chaos-argo-workflows-view
+  name: tke-serverless-argo-workflows-view
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-workflow-controller
-    app.kubernetes.io/instance: tke-chaos
+    app.kubernetes.io/instance: tke-serverless
     app.kubernetes.io/component: workflow-controller
     app: workflow-controller
     app.kubernetes.io/managed-by: Helm
@@ -2813,11 +2813,11 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: tke-chaos-argo-workflows-edit
+  name: tke-serverless-argo-workflows-edit
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-server
-    app.kubernetes.io/instance: tke-chaos
+    app.kubernetes.io/instance: tke-serverless
     app.kubernetes.io/component: server
     app: server
     app.kubernetes.io/managed-by: Helm
@@ -2858,11 +2858,11 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: tke-chaos-argo-workflows-admin
+  name: tke-serverless-argo-workflows-admin
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-server
-    app.kubernetes.io/instance: tke-chaos
+    app.kubernetes.io/instance: tke-serverless
     app.kubernetes.io/component: server
     app: server
     app.kubernetes.io/managed-by: Helm
@@ -2903,11 +2903,11 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: tke-chaos-argo-workflows-workflow-controller
+  name: tke-serverless-argo-workflows-workflow-controller
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-workflow-controller
-    app.kubernetes.io/instance: tke-chaos
+    app.kubernetes.io/instance: tke-serverless
     app.kubernetes.io/component: workflow-controller
     app: workflow-controller
     app.kubernetes.io/managed-by: Helm
@@ -3050,11 +3050,11 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: tke-chaos-argo-workflows-workflow-controller-cluster-template
+  name: tke-serverless-argo-workflows-workflow-controller-cluster-template
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-workflow-controller
-    app.kubernetes.io/instance: tke-chaos
+    app.kubernetes.io/instance: tke-serverless
     app.kubernetes.io/component: workflow-controller
     app: workflow-controller
     app.kubernetes.io/managed-by: Helm
@@ -3074,11 +3074,11 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: tke-chaos-argo-workflows-server
+  name: tke-serverless-argo-workflows-server
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-server
-    app.kubernetes.io/instance: tke-chaos
+    app.kubernetes.io/instance: tke-serverless
     app.kubernetes.io/component: server
     app: server
     app.kubernetes.io/managed-by: Helm
@@ -3145,11 +3145,11 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: tke-chaos-argo-workflows-server-cluster-template
+  name: tke-serverless-argo-workflows-server-cluster-template
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-server
-    app.kubernetes.io/instance: tke-chaos
+    app.kubernetes.io/instance: tke-serverless
     app.kubernetes.io/component: server
     app: server
     app.kubernetes.io/managed-by: Helm
@@ -3172,11 +3172,11 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: tke-chaos-argo-workflows-workflow-controller
+  name: tke-serverless-argo-workflows-workflow-controller
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-workflow-controller
-    app.kubernetes.io/instance: tke-chaos
+    app.kubernetes.io/instance: tke-serverless
     app.kubernetes.io/component: workflow-controller
     app: workflow-controller
     app.kubernetes.io/managed-by: Helm
@@ -3184,21 +3184,21 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: tke-chaos-argo-workflows-workflow-controller
+  name: tke-serverless-argo-workflows-workflow-controller
 subjects:
   - kind: ServiceAccount
-    name: tke-chaos-argo-workflows-workflow-controller
-    namespace: "tke-chaos-test"
+    name: tke-serverless-argo-workflows-workflow-controller
+    namespace: "tke-serverless-test"
 ---
 # Source: argo-workflows/templates/controller/workflow-controller-crb.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: tke-chaos-argo-workflows-workflow-controller-cluster-template
+  name: tke-serverless-argo-workflows-workflow-controller-cluster-template
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-workflow-controller
-    app.kubernetes.io/instance: tke-chaos
+    app.kubernetes.io/instance: tke-serverless
     app.kubernetes.io/component: workflow-controller
     app: workflow-controller
     app.kubernetes.io/managed-by: Helm
@@ -3206,21 +3206,21 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: tke-chaos-argo-workflows-workflow-controller-cluster-template
+  name: tke-serverless-argo-workflows-workflow-controller-cluster-template
 subjects:
   - kind: ServiceAccount
-    name: tke-chaos-argo-workflows-workflow-controller
-    namespace: "tke-chaos-test"
+    name: tke-serverless-argo-workflows-workflow-controller
+    namespace: "tke-serverless-test"
 ---
 # Source: argo-workflows/templates/server/server-crb.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: tke-chaos-argo-workflows-server
+  name: tke-serverless-argo-workflows-server
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-server
-    app.kubernetes.io/instance: tke-chaos
+    app.kubernetes.io/instance: tke-serverless
     app.kubernetes.io/component: server
     app: server
     app.kubernetes.io/managed-by: Helm
@@ -3228,21 +3228,21 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: tke-chaos-argo-workflows-server
+  name: tke-serverless-argo-workflows-server
 subjects:
 - kind: ServiceAccount
-  name: tke-chaos-argo-workflows-server
-  namespace: "tke-chaos-test"
+  name: tke-serverless-argo-workflows-server
+  namespace: "tke-serverless-test"
 ---
 # Source: argo-workflows/templates/server/server-crb.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: tke-chaos-argo-workflows-server-cluster-template
+  name: tke-serverless-argo-workflows-server-cluster-template
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-server
-    app.kubernetes.io/instance: tke-chaos
+    app.kubernetes.io/instance: tke-serverless
     app.kubernetes.io/component: server
     app: server
     app.kubernetes.io/managed-by: Helm
@@ -3250,21 +3250,21 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: tke-chaos-argo-workflows-server-cluster-template
+  name: tke-serverless-argo-workflows-server-cluster-template
 subjects:
 - kind: ServiceAccount
-  name: tke-chaos-argo-workflows-server
-  namespace: "tke-chaos-test"
+  name: tke-serverless-argo-workflows-server
+  namespace: "tke-serverless-test"
 ---
 # Source: argo-workflows/templates/controller/workflow-role.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: tke-chaos-argo-workflows-workflow
+  name: tke-serverless-argo-workflows-workflow
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-workflow-controller
-    app.kubernetes.io/instance: tke-chaos
+    app.kubernetes.io/instance: tke-serverless
     app.kubernetes.io/component: workflow-controller
     app: workflow-controller
     app.kubernetes.io/managed-by: Helm
@@ -3283,16 +3283,16 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: tke-chaos-argo-workflows-workflow
+  name: tke-serverless-argo-workflows-workflow
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-workflow-controller
-    app.kubernetes.io/instance: tke-chaos
+    app.kubernetes.io/instance: tke-serverless
     app.kubernetes.io/component: workflow-controller
     app: workflow-controller
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: argo-workflows
-  namespace: tke-chaos-test
+  namespace: tke-serverless-test
 rules:
   - apiGroups:
       - argoproj.io
@@ -3306,11 +3306,11 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: tke-chaos-argo-workflows-workflow
+  name: tke-serverless-argo-workflows-workflow
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-workflow-controller
-    app.kubernetes.io/instance: tke-chaos
+    app.kubernetes.io/instance: tke-serverless
     app.kubernetes.io/component: workflow-controller
     app: workflow-controller
     app.kubernetes.io/managed-by: Helm
@@ -3319,7 +3319,7 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: tke-chaos-argo-workflows-workflow
+  name: tke-serverless-argo-workflows-workflow
 subjects:
   - kind: ServiceAccount
     name: argo-workflow
@@ -3329,35 +3329,35 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: tke-chaos-argo-workflows-workflow
+  name: tke-serverless-argo-workflows-workflow
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-workflow-controller
-    app.kubernetes.io/instance: tke-chaos
+    app.kubernetes.io/instance: tke-serverless
     app.kubernetes.io/component: workflow-controller
     app: workflow-controller
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: argo-workflows
-  namespace: tke-chaos-test
+  namespace: tke-serverless-test
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: tke-chaos-argo-workflows-workflow
+  name: tke-serverless-argo-workflows-workflow
 subjects:
   - kind: ServiceAccount
     name: argo-workflow
-    namespace: tke-chaos-test
+    namespace: tke-serverless-test
 ---
 # Source: argo-workflows/templates/server/server-service.yaml
 apiVersion: v1
 kind: Service
 metadata:
-  name: tke-chaos-argo-workflows-server
-  namespace: "tke-chaos-test"
+  name: tke-serverless-argo-workflows-server
+  namespace: "tke-serverless-test"
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-server
-    app.kubernetes.io/instance: tke-chaos
+    app.kubernetes.io/instance: tke-serverless
     app.kubernetes.io/component: server
     app: server
     app.kubernetes.io/managed-by: Helm
@@ -3369,7 +3369,7 @@ spec:
     targetPort: 2746
   selector:
     app.kubernetes.io/name: argo-workflows-server
-    app.kubernetes.io/instance: tke-chaos
+    app.kubernetes.io/instance: tke-serverless
   sessionAffinity: None
   type: ClusterIP
 ---
@@ -3377,12 +3377,12 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: tke-chaos-argo-workflows-workflow-controller
-  namespace: "tke-chaos-test"
+  name: tke-serverless-argo-workflows-workflow-controller
+  namespace: "tke-serverless-test"
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-workflow-controller
-    app.kubernetes.io/instance: tke-chaos
+    app.kubernetes.io/instance: tke-serverless
     app.kubernetes.io/component: workflow-controller
     app: workflow-controller
     app.kubernetes.io/managed-by: Helm
@@ -3394,20 +3394,20 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: argo-workflows-workflow-controller
-      app.kubernetes.io/instance: tke-chaos
+      app.kubernetes.io/instance: tke-serverless
   template:
     metadata:
       labels:
         helm.sh/chart: argo-workflows-0.45.14
         app.kubernetes.io/name: argo-workflows-workflow-controller
-        app.kubernetes.io/instance: tke-chaos
+        app.kubernetes.io/instance: tke-serverless
         app.kubernetes.io/component: workflow-controller
         app: workflow-controller
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/part-of: argo-workflows
         app.kubernetes.io/version: "v3.6.6"
     spec:
-      serviceAccountName: tke-chaos-argo-workflows-workflow-controller
+      serviceAccountName: tke-serverless-argo-workflows-workflow-controller
       containers:
         - name: controller
           image: "ccr.ccs.tencentyun.com/tkeimages/workflow-controller:v3.6.6"
@@ -3415,7 +3415,7 @@ spec:
           command: [ "workflow-controller" ]
           args:
           - "--configmap"
-          - "tke-chaos-argo-workflows-workflow-controller-configmap"
+          - "tke-serverless-argo-workflows-workflow-controller-configmap"
           - "--executor-image"
           - "ccr.ccs.tencentyun.com/tkeimages/argoexec:v3.6.6"
           - "--loglevel"
@@ -3465,12 +3465,12 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: tke-chaos-argo-workflows-server
-  namespace: "tke-chaos-test"
+  name: tke-serverless-argo-workflows-server
+  namespace: "tke-serverless-test"
   labels:
     helm.sh/chart: argo-workflows-0.45.14
     app.kubernetes.io/name: argo-workflows-server
-    app.kubernetes.io/instance: tke-chaos
+    app.kubernetes.io/instance: tke-serverless
     app.kubernetes.io/component: server
     app: server
     app.kubernetes.io/managed-by: Helm
@@ -3482,20 +3482,20 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: argo-workflows-server
-      app.kubernetes.io/instance: tke-chaos
+      app.kubernetes.io/instance: tke-serverless
   template:
     metadata:
       labels:
         helm.sh/chart: argo-workflows-0.45.14
         app.kubernetes.io/name: argo-workflows-server
-        app.kubernetes.io/instance: tke-chaos
+        app.kubernetes.io/instance: tke-serverless
         app.kubernetes.io/component: server
         app: server
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/part-of: argo-workflows
         app.kubernetes.io/version: "v3.6.6"
     spec:
-      serviceAccountName: tke-chaos-argo-workflows-server
+      serviceAccountName: tke-serverless-argo-workflows-server
       containers:
         - name: argo-server
           image: "ccr.ccs.tencentyun.com/tkeimages/argocli:v3.6.6"
@@ -3509,7 +3509,7 @@ spec:
             runAsNonRoot: true
           args:
           - server
-          - --configmap=tke-chaos-argo-workflows-workflow-controller-configmap
+          - --configmap=tke-serverless-argo-workflows-workflow-controller-configmap
           - "--secure=false"
           - "--loglevel"
           - "info"
