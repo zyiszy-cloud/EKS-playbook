@@ -1,0 +1,56 @@
+name: Validate Workflows
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  validate-yaml:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.24.0'
+    
+    - name: Validate YAML files
+      run: |
+        echo "Validating YAML syntax..."
+        find . -name "*.yaml" -o -name "*.yml" | while read file; do
+          echo "Validating $file"
+          kubectl apply --dry-run=client -f "$file" || echo "Warning: $file may not be a valid Kubernetes resource"
+        done
+    
+    - name: Check shell scripts
+      run: |
+        echo "Checking shell scripts..."
+        find . -name "*.sh" | while read script; do
+          echo "Checking $script"
+          bash -n "$script"
+        done
+    
+    - name: Validate links in README
+      uses: gaurav-nelson/github-action-markdown-link-check@v1
+      with:
+        use-quiet-mode: 'yes'
+        use-verbose-mode: 'yes'
+        config-file: '.github/workflows/mlc_config.json'
+
+  test-scripts:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Test automation script help
+      run: |
+        chmod +x run-serverless-tests.sh
+        ./run-serverless-tests.sh --help
+    
+    - name: Test script syntax
+      run: |
+        bash -n run-serverless-tests.sh
+        echo "Script syntax is valid"

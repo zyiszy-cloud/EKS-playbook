@@ -1,122 +1,221 @@
-# Kubernetes Chaos Testing Playbooks Guide
+# EKS/TKE Serverless Performance Testing Playbook
 
 [English](README.md) | [中文](README_zh.md)
 
-## Background
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-1.20+-blue.svg)](https://kubernetes.io/)
+[![TKE](https://img.shields.io/badge/TKE-Serverless-green.svg)](https://cloud.tencent.com/product/tke)
 
-Kubernetes' centralized architecture and declarative management model, while enabling efficient operations, also introduce critical risks of cascading failures. The open ecosystem (with third-party components like Flink and Rancher) and complex multi-service environments further exacerbate these risks:
+## 🚀 Overview
 
-- Cascading deletion disaster: A customer using Rancher to manage Kubernetes clusters accidentally deleted a namespace, which subsequently deleted all core business workloads and Pods in the production cluster, causing service interruption.
-- Control plane overload: In a large OpenAI cluster, deploying a DaemonSet monitoring component triggered control plane failures and coredns overload. The coredns scaling depended on control plane recovery, affecting the data plane and causing global OpenAI service disruption.
-- Data plane's strong dependency on control plane: In open-source Flink on Kubernetes scenarios, kube-apiserver disruption may cause Flink task checkpoint failures and leader election anomalies. In severe cases, it may trigger abnormal exits of all existing task Pods, leading to complete data plane collapse and major incidents.
+This project provides comprehensive performance testing capabilities for **Tencent Cloud TKE Serverless** (Elastic Kubernetes Service) and general Kubernetes chaos engineering scenarios. Built on Argo Workflow, it offers automated testing pipelines for evaluating and optimizing serverless container performance.
 
-These cases are not uncommon. The root cause lies in Kubernetes' architecture vulnerability chain - a single component failure or incorrect command can trigger global failures through centralized pathways. 
+## ✨ Key Features
 
-To proactively understand the impact duration and severity of control plane failures on services, we should conduct regular fault simulation and assessments to improve failure response capabilities, ensuring Kubernetes environment stability and reliability. 
+### 🎯 TKE Serverless Performance Testing
+- **Pod Startup Performance**: Test pod startup speed across different specifications
+- **Auto-scaling Performance**: Evaluate HPA response time and stability
+- **Resource Optimization**: Analyze cost-performance ratios
+- **Automated Reporting**: Generate detailed performance reports
 
-This project provides Kubernetes chaos testing capabilities covering scenarios like node shutdown, accidental resource deletion, and control plane component (etcd, kube-apiserver, coredns, etc.) overload/disruption, it will help you minimize blast radius of cluster failures.
+### 🔥 Chaos Engineering Scenarios
+- **Control Plane Testing**: API server, etcd overload scenarios
+- **Component Disruption**: CoreDNS, kube-proxy service interruption
+- **Master Component Testing**: Managed cluster component shutdown/recovery
+- **Resource Protection**: Namespace deletion protection testing
 
-## Prerequisites
+## 🏃‍♂️ Quick Start
 
-1. Prepare two Kubernetes clusters: `src cluster` (for executing testing workflows) and `dest cluster` (the target cluster for testings).
+### Prerequisites
 
-**dest cluster**
+1. **Kubernetes Clusters**: Source cluster (for running tests) and target cluster (for testing)
+2. **TKE Serverless Cluster**: Tencent Cloud EKS cluster
+3. **Argo Workflow**: Installed in source cluster
 
-2. Create `tke-chaos-test/tke-chaos-precheck-resource ConfigMap` in `dest cluster` as a marker for testing eligibility:
+### One-Click Testing (Recommended)
+
 ```bash
-kubectl create ns tke-chaos-test && kubectl create -n tke-chaos-test configmap tke-chaos-precheck-resource --from-literal=empty=""
+# Clone the repository
+git clone https://github.com/wi1123/EKS-playbook.git
+cd EKS-playbook
+
+# Make script executable
+chmod +x run-serverless-tests.sh
+
+# Run pod startup performance test
+./run-serverless-tests.sh startup
+
+# Run auto-scaling performance test
+./run-serverless-tests.sh scaling
+
+# Run all performance tests
+./run-serverless-tests.sh all
 ```
 
-**src cluster**
+### Manual Setup
 
-3. Obtain `dest cluster`'s internal kubeconfig from Tencent Cloud TKE Console, save to `dest-cluster-kubeconfig` file, then create secret in `src cluster`:
 ```bash
-kubectl create ns tke-chaos-test && kubectl create -n tke-chaos-test secret generic dest-cluster-kubeconfig --from-file=config=./dest-cluster-kubeconfig
-```
+# Create necessary resources
+kubectl create ns tke-chaos-test
+kubectl create -n tke-chaos-test configmap tke-chaos-precheck-resource --from-literal=empty=""
 
-4. Clone this project and then deploy Argo Workflow in `src cluster` (skip if Argo is already deployed, [**Argo Documentation**](https://argo-workflows.readthedocs.io/en/latest/)):
-```bash
-# Clone this project
-git clone https://github.com/tkestack/tke-chaos-playbook.git && cd tke-chaos-playbook
+# Configure target cluster kubeconfig
+kubectl create -n tke-chaos-test secret generic dest-cluster-kubeconfig --from-file=config=./your-kubeconfig
 
 # Deploy Argo Workflow
 kubectl create -f playbook/install-argo.yaml
 
-# Verify Argo Workflow Pod status
-kubectl get po -n tke-chaos-test
+# Deploy templates and RBAC
+kubectl create -f playbook/rbac.yaml
+kubectl create -f playbook/all-in-one-template.yaml
+
+# Run specific tests
+kubectl create -f playbook/workflow/serverless-pod-startup-performance.yaml
+kubectl create -f playbook/workflow/serverless-scaling-performance.yaml
 ```
 
-5. Enable public access for `tke-chaos-test/tke-chaos-argo-workflows-server Service` in Tencent Cloud TKE Console. Access Argo Server UI at `LoadBalancer IP:2746` using credentials obtained via:
+## 📊 Performance Testing Scenarios
 
-Note: If the cluster restricts public access, please configure the Service for internal access and connect via internal network.
+| Test Scenario | File | Description | Key Metrics |
+|---------------|------|-------------|-------------|
+| Pod Startup | `serverless-pod-startup-performance.yaml` | Test pod startup speed for different specs | Startup time, success rate, concurrency |
+| Auto-scaling | `serverless-scaling-performance.yaml` | Test HPA scale-out/scale-in performance | Response time, stability, resource efficiency |
+| Network Performance | Coming Soon | Test network latency and throughput | Latency, bandwidth, connection time |
+| Storage Performance | Coming Soon | Test storage I/O performance | IOPS, throughput, mount time |
+
+## 🎛️ Configuration Parameters
+
+### Pod Startup Performance Test
+```yaml
+pod-count-small: "10"      # Small spec pods (0.25C/0.5Gi)
+pod-count-medium: "5"      # Medium spec pods (1C/2Gi)
+pod-count-large: "3"       # Large spec pods (2C/4Gi)
+startup-timeout: "120s"    # Pod startup timeout
+test-duration: "300s"      # Test duration
+```
+
+### Auto-scaling Performance Test
+```yaml
+initial-replicas: "2"      # Initial replica count
+max-replicas: "20"         # Maximum replica count
+target-cpu-percent: "50"   # Target CPU utilization
+load-duration: "300s"      # Load test duration
+cooldown-duration: "180s"  # Cooldown period
+```
+
+## 📈 Performance Benchmarks
+
+### Pod Startup Performance
+- **Small Pods** (0.25C/0.5Gi): < 10 seconds
+- **Medium Pods** (1C/2Gi): < 15 seconds
+- **Large Pods** (2C/4Gi): < 30 seconds
+- **Success Rate**: > 95%
+
+### Auto-scaling Performance
+- **Scale-out Response**: < 60 seconds
+- **Scale-in Response**: < 120 seconds
+- **Stability**: No frequent oscillation
+
+## 🔍 Monitoring and Results
+
+### View Test Results
+
+1. **Argo UI** (Recommended):
+   ```bash
+   # Get access token
+   kubectl exec -it -n tke-chaos-test deployment/tke-chaos-argo-workflows-server -- argo auth token
+   # Access UI at LoadBalancer IP:2746
+   ```
+
+2. **Command Line**:
+   ```bash
+   # Check workflow status
+   kubectl get workflow -n tke-chaos-test
+   
+   # View detailed results
+   kubectl describe workflow <workflow-name> -n tke-chaos-test
+   ```
+
+3. **Test Status**:
+   ```bash
+   ./run-serverless-tests.sh --status
+   ```
+
+## 📚 Documentation
+
+- [TKE Serverless Performance Guide](playbook/TKE_SERVERLESS_PERFORMANCE_GUIDE.md) - Comprehensive testing guide
+- [Chaos Engineering Scenarios](playbook/README.md) - Available chaos testing scenarios
+- [Troubleshooting Guide](playbook/TKE_SERVERLESS_PERFORMANCE_GUIDE.md#故障排查) - Common issues and solutions
+
+## 🛠️ Advanced Usage
+
+### Custom Test Parameters
+
+Edit the workflow YAML files to customize test parameters:
+
+```yaml
+# Example: Modify pod startup test
+arguments:
+  parameters:
+  - name: pod-count-small
+    value: "20"  # Increase small pod count
+  - name: startup-timeout
+    value: "180s"  # Extend timeout
+```
+
+### Integration with CI/CD
+
+```yaml
+# Example GitHub Actions workflow
+name: TKE Serverless Performance Test
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM
+jobs:
+  performance-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Run Performance Tests
+      run: ./run-serverless-tests.sh all
+```
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
+
+### Development Setup
 
 ```bash
-# Get Argo Server UI access token
-kubectl exec -it -n tke-chaos-test deployment/tke-chaos-argo-workflows-server -- argo auth token
+# Fork and clone the repository
+git clone https://github.com/your-username/EKS-playbook.git
+cd EKS-playbook
+
+# Create a feature branch
+git checkout -b feature/new-test-scenario
+
+# Make your changes and test
+./run-serverless-tests.sh startup
+
+# Submit a pull request
 ```
 
-![Argo Server UI](./playbook/docs/argo-server-ui.png)
+## 📄 License
 
-## Quick Start
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
-The Kubernetes Control Plane fault simulation Playbook is an automated pipeline built on Argo Workflow.
+## 🙏 Acknowledgments
 
-Using `kube-apiserver overload` as an example:
+- Built on [Argo Workflow](https://argoproj.github.io/argo-workflows/)
+- Inspired by chaos engineering principles
+- Designed for Tencent Cloud TKE Serverless
 
-- Create kube-apiserver overload workflow:
-```bash
-kubectl create -f playbook/rbac.yaml && kubectl create -f playbook/all-in-one-template.yaml
-kubectl create -f playbook/workflow/apiserver-overload-scenario.yaml
-```
+## 📞 Support
 
-![apiserver overload flowchart](./playbook/docs/chaos-flowchart-en.png)
+- 📧 Issues: [GitHub Issues](https://github.com/wi1123/EKS-playbook/issues)
+- 📖 Documentation: [Wiki](https://github.com/wi1123/EKS-playbook/wiki)
+- 💬 Discussions: [GitHub Discussions](https://github.com/wi1123/EKS-playbook/discussions)
 
-**Core Workflow Explanation**
+---
 
-- **Testing Configuration**: Before execution, you may need to configure parameters like `webhook-url` for notifications. Default values are provided so testings can run without modification. See [Scenario Parameters](playbook/README.md) for details.
-- **Precheck**: Before execution, `dest cluster` health is validated by checking Node and Pod health ratios. Testings are blocked if below thresholds (adjustable via `precheck-pods-health-ratio` and `precheck-nodes-health-ratio`). Also verifies existence of `tke-chaos-test/tke-chaos-precheck-resource ConfigMap`.
-- **Execute Testing**: During kube-apiserver overload testing, the system floods `dest cluster`'s kube-apiserver with List Pod requests to simulate high load. Monitor kube-apiserver metrics via Tencent Cloud TKE Console and observe your business Pod health during testing.
-- **Result Processing**: View testing results in Argo Server UI (recommended) or via `kubectl describe workflow {workflow-name}`.
-
-### Deleting Tests
-```bash
-kubectl delete -f playbook/workflow/apiserver-overload-scenario.yaml
-```
-
-## Roadmap
-
-| Supported Features                         | Priority | Status      | Planned Release | Description                                                     |
-|--------------------------------------------|----------|-------------|-----------------|-----------------------------------------------------------------|
-| apiserver overload                         |   -      | Completed   |      -          | Simulate kube-apiserver high load                               |
-| etcd overload                              |   -      | Completed   |      -          | Simulate etcd high load                                         |
-| apiserver overload (APF)                   |   -      | Completed   |      -          | Add Expensive List APF Policy,Simulate kube-apiserver high load |
-| etcd overload (ReadCache/Consistent cache) |   -      | Completed   |      -          | Add Etcd Overload Protect Policy, Simulate etcd high load       |
-| coredns disruption                         |   -      | Completed   |      -          | Simulate coredns service disruption                                 |
-| kubernetes-proxy disruption                |   -      | Completed   |      -          | Simulate kubernetes-proxy disruption                                |
-| accidental deletion scenario               |   -      | Completed   |      -          | Simulate accidental resource deletion                           |
-| TKE managed cluster kube-apiserver disruption     |   -      | Completed   |      -          | Simulate kube-apiserver disruption                                  |
-| TKE managed cluster kube-scheduler disruption      | -       | Completed   |      -          | Test scheduling behavior during scheduler failure               |
-| TKE managed cluster kube-controller-manager disruption     | -       | Completed   |      -          | Validate controller component failure scenarios                 |
-| TKE Self-Maintenance Cluster master node shutdown  | P1       | In Progress |  2025-06-30     | Simulate master node poweroff                                   |
-| etcd disruption                                | P1       | In Progress |  2025-06-30     | Simulate etcd cluster failure                                   |
-
-## FAQ
-1. Why use two clusters for fault simulation?
-
-  Testings are orchestrated using Argo Workflow, which follows a CRD-based pattern heavily dependent on kube-apiserver. Using a single cluster for fault simulation (especially apiserver/etcd overload or disruption tests) would make kube-apiserver unavailable, preventing Argo Workflow Controller from functioning and halting the entire workflow.
-
-2. How to track testing progress after starting?
-
-  Monitor testing progress via Argo Server UI or `kubectl get -n tke-chaos-test workflow`. By default, testings run in the `tke-chaos-test` namespace. You can also watch fault simulation Pods via `kubectl get -n tke-chaos-test po -w` - Error-state Pods typically indicate testing failures that can be investigated via Pod logs.
-
-3. What are common failure reasons?
-
-  Typical issues include: insufficient RBAC permissions for fault simulation Pods, missing `tke-chaos-test/tke-chaos-precheck-resource ConfigMap` in target cluster, missing `tke-chaos-test namespace`, or Argo workflow controller anomalies. Check fault simulation Pod or Argo Workflow Controller logs for details.
-
-4. How to troubleshoot Argo Workflow Controller issues?
-
-  When workflows show no status after creation via `kubectl get workflow`, the Argo workflow-controller is likely malfunctioning. Check controller logs via:
-```bash
-kubectl logs -n tke-chaos-test deployment/tke-chaos-argo-workflows-workflow-controller --tail 50 -f
-```
-  Many cases involve insufficient RBAC permissions - modify the corresponding ClusterRole to add required permissions.
+**Made with ❤️ for the Kubernetes and Serverless community**

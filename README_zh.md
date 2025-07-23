@@ -83,6 +83,119 @@ kubectl create -f playbook/workflow/apiserver-overload-scenario.yaml
 kubectl delete -f playbook/workflow/apiserver-overload-scenario.yaml
 ```
 
+## TKE Serverless 性能测试
+
+本项目新增了针对腾讯云TKE Serverless（弹性容器服务EKS）的性能测试能力，帮助您评估和优化Serverless容器的性能表现。
+
+### 快速开始 - Serverless性能测试
+
+#### 1. 使用自动化脚本（推荐）
+
+```bash
+# 赋予执行权限
+chmod +x run-serverless-tests.sh
+
+# 执行Pod启动性能测试
+./run-serverless-tests.sh startup
+
+# 执行弹性扩缩容性能测试
+./run-serverless-tests.sh scaling
+
+# 执行所有性能测试
+./run-serverless-tests.sh all
+
+# 查看测试状态
+./run-serverless-tests.sh --status
+
+# 清理测试资源
+./run-serverless-tests.sh --cleanup
+```
+
+#### 2. 手动执行测试
+
+**Pod启动性能测试**：
+```bash
+# 部署必要的模板和RBAC
+kubectl create -f playbook/rbac.yaml && kubectl create -f playbook/all-in-one-template.yaml
+
+# 执行Pod启动性能测试
+kubectl create -f playbook/workflow/serverless-pod-startup-performance.yaml
+
+# 监控测试进度
+kubectl get workflow -n tke-chaos-test
+kubectl describe workflow serverless-pod-startup-performance -n tke-chaos-test
+```
+
+**弹性扩缩容性能测试**：
+```bash
+# 执行扩缩容性能测试
+kubectl create -f playbook/workflow/serverless-scaling-performance.yaml
+
+# 监控HPA和Pod状态
+kubectl get hpa -n tke-serverless-scaling-test -w
+kubectl get pods -n tke-serverless-scaling-test -w
+```
+
+### 测试场景说明
+
+| 测试场景 | 测试文件 | 测试内容 | 关键指标 |
+|---------|---------|---------|---------|
+| Pod启动性能 | `serverless-pod-startup-performance.yaml` | 不同规格Pod启动速度测试 | 启动时间、成功率、并发能力 |
+| 弹性扩缩容 | `serverless-scaling-performance.yaml` | HPA自动扩缩容响应测试 | 扩缩容响应时间、稳定性 |
+
+### 性能测试参数配置
+
+**Pod启动性能测试参数**：
+```yaml
+pod-count-small: "10"      # 小规格Pod数量 (0.25C/0.5Gi)
+pod-count-medium: "5"      # 中规格Pod数量 (1C/2Gi)
+pod-count-large: "3"       # 大规格Pod数量 (2C/4Gi)
+startup-timeout: "120s"    # Pod启动超时时间
+test-duration: "300s"      # 测试持续时间
+```
+
+**弹性扩缩容测试参数**：
+```yaml
+initial-replicas: "2"      # 初始副本数
+max-replicas: "20"         # 最大副本数
+target-cpu-percent: "50"   # CPU目标使用率
+load-duration: "300s"      # 负载持续时间
+cooldown-duration: "180s"  # 冷却时间
+```
+
+### 查看测试结果
+
+1. **通过Argo UI查看**（推荐）：
+   - 访问 `LoadBalancer IP:2746`
+   - 使用token登录查看详细的测试流程和结果
+
+2. **通过命令行查看**：
+   ```bash
+   # 查看工作流状态
+   kubectl get workflow -n tke-chaos-test
+   
+   # 查看详细结果
+   kubectl describe workflow <workflow-name> -n tke-chaos-test
+   ```
+
+3. **查看详细测试指南**：
+   ```bash
+   cat playbook/TKE_SERVERLESS_PERFORMANCE_GUIDE.md
+   ```
+
+### 性能基准参考
+
+**Pod启动性能**：
+- 小规格Pod (0.25C/0.5Gi)：通常 < 10秒
+- 中规格Pod (1C/2Gi)：通常 < 15秒
+- 大规格Pod (2C/4Gi)：通常 < 30秒
+- 启动成功率：应 > 95%
+
+**扩缩容性能**：
+- 扩容响应时间：通常 < 60秒
+- 缩容响应时间：通常 < 120秒
+- 扩缩容稳定性：无频繁抖动
+
 ## 功能规划路线图
 
 | 支持功能                         | 优先级  | 当前状态     | 计划发布时间  | 描述                                                |
@@ -99,6 +212,8 @@ kubectl delete -f playbook/workflow/apiserver-overload-scenario.yaml
 | TKE托管集群kube-controller-manager停服演练  | -    |    完成     |        -       | 验证控制器组件故障场景                                       |
 | TKE自维护集群master节点停机        | P1    |    开发中     |  2025-06-30  | 模拟master关机场景                                      |
 | etcd停服演练                     | P1    |    开发中     |  2025-06-30  | 模拟etcd集群故障场景                                      |
+| TKE Serverless Pod启动性能测试   | P0    |    完成       |      -       | 测试Serverless Pod启动速度和稳定性                        |
+| TKE Serverless 弹性扩缩容性能测试 | P0    |    完成       |      -       | 测试HPA自动扩缩容响应速度和稳定性                          |
 
 ## 常见问题
 1. 为什么要用两个集群来执行演练测试?
