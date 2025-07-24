@@ -193,11 +193,15 @@ spec:
         echo "超级节点演练前置检查完成"
       volumeMounts:
       - name: kubeconfig
-        mountPath: /root/.kube
+        mountPath: "/.kube"
+        readOnly: true
       volumes:
       - name: kubeconfig
         secret:
           secretName: "{{inputs.parameters.kubeconfig-secret-name}}"
+          items:
+          - key: config
+            path: config
 
   - name: notify
     inputs:
@@ -366,11 +370,15 @@ spec:
         echo "超级节点调度压力测试完成"
       volumeMounts:
       - name: kubeconfig
-        mountPath: /root/.kube
+        mountPath: "/.kube"
+        readOnly: true
       volumes:
       - name: kubeconfig
         secret:
           secretName: "{{inputs.parameters.kubeconfig-secret-name}}"
+          items:
+          - key: config
+            path: config
 
   - name: resource-limit-test
     inputs:
@@ -446,11 +454,15 @@ spec:
         echo "超级节点资源限制测试完成"
       volumeMounts:
       - name: kubeconfig
-        mountPath: /root/.kube
+        mountPath: "/.kube"
+        readOnly: true
       volumes:
       - name: kubeconfig
         secret:
           secretName: "{{inputs.parameters.kubeconfig-secret-name}}"
+          items:
+          - key: config
+            path: config
 
   - name: failure-simulation-test
     inputs:
@@ -525,11 +537,15 @@ spec:
         echo "超级节点故障模拟测试完成"
       volumeMounts:
       - name: kubeconfig
-        mountPath: /root/.kube
+        mountPath: "/.kube"
+        readOnly: true
       volumes:
       - name: kubeconfig
         secret:
           secretName: "{{inputs.parameters.kubeconfig-secret-name}}"
+          items:
+          - key: config
+            path: config
 
   - name: cleanup
     inputs:
@@ -548,8 +564,12 @@ spec:
         echo "超级节点测试资源清理完成"
       volumeMounts:
       - name: kubeconfig
-        mountPath: /root/.kube
+        mountPath: "/.kube"
+        readOnly: true
       volumes:
       - name: kubeconfig
         secret:
           secretName: "{{inputs.parameters.kubeconfig-secret-name}}"
+          items:
+          - key: config
+            path: config

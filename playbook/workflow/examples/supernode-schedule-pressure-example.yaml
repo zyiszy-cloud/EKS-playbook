@@ -17,7 +17,7 @@ spec:
     - name: chaos-image
       value: ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.2
     - name: cluster-id  # 请修改为你的集群ID
-      value: "未知"
+      value: "cls-61tzj4ke"
     - name: webhook-url  # 可选：企业微信群webhook地址
       value: ""
     - name: kubeconfig-secret-name
