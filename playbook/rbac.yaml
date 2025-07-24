@@ -1,0 +1,110 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  namespace: tke-chaos-test
+  name: tke-chaos
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: tke-chaos
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - "pods"
+  - "configmaps"
+  - "secrets"
+  verbs:
+  - "get"
+  - "list"
+  - "watch"
+  - "create"
+  - "update"
+  - "patch"
+  - "delete"
+- apiGroups:
+  - ""
+  resources:
+  - "nodes"
+  - "namespaces"
+  verbs:
+  - "get"
+  - "list"
+  - "watch"
+- apiGroups:
+  - "apps"
+  resources:
+  - "deployments"
+  - "deployments/scale"
+  - "replicasets"
+  - "statefulsets"
+  - "daemonsets"
+  - "controllerrevisions"
+  verbs:
+  - "get"
+  - "list"
+  - "watch"
+  - "create"
+  - "update"
+  - "patch"
+  - "delete"
+- apiGroups:
+  - "metrics.k8s.io"
+  resources:
+  - pods
+  - nodes
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - argoproj.io
+  resources:
+  - workflowtaskresults
+  - workflowtasksets
+  - workflowtasksets/status
+  - workflowtaskresults/finalizers
+  verbs:
+  - create
+  - delete
+  - deletecollection
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - flowcontrol.apiserver.k8s.io
+  resources:
+  - flowschemas
+  - prioritylevelconfigurations
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: tke-chaos
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tke-chaos
+subjects:
+- kind: ServiceAccount
+  namespace: tke-chaos-test
+  name: tke-chaos
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tke-chaos.service-account-token
+  annotations:
+    kubernetes.io/service-account.name: tke-chaos
+type: kubernetes.io/service-account-token

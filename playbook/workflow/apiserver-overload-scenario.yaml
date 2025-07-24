@@ -1,0 +1,274 @@
+---
+# 功能说明：apiserver高负载测试, 带apf限流
+# 1) 在集群中创建资源(pods/configmaps), 模拟客户现网环境
+# 2) 创建PriorityLevelConfiguration、FlowSchema资源, 用于限流
+# 3) 对apiserver发起洪泛list请求, 模拟apiserver高负载压力
+# 4) 删除PriorityLevelConfiguration、FlowSchema资源
+# 5) 删除资源1)中创建的资源
+# 注意⚠️: 如工作流未执行完异常退出, 请手动删除1)2)中创建的资源
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  labels:
+    apiserver-overload-scenario: "true"
+  name: apiserver-overload-scenario
+  namespace: tke-chaos-test
+spec:
+  entrypoint: main
+  serviceAccountName: tke-chaos
+  arguments:
+    parameters:
+    # 全局参数
+    - name: chaos-image
+      value: ccr.ccs.tencentyun.com/tkeimages/tke-chaos:v0.0.2
+    - name: cluster-id  # 演练集群ID
+      value: "未知"
+    - name: webhook-url  # 企业微信群webhook地址
+      value: ""
+    - name: kubeconfig-secret-name  # 目标集群接入kubeconfig的secret名称
+      value: "dest-cluster-kubeconfig"
+    - name: chaos-type  # 演练类型
+      value: "apiserver high load"
+
+    # precheck参数
+    - name: precheck-cluster-image  # 前置检查工具镜像
+      value: "{{workflow.parameters.chaos-image}}"
+    - name: precheck-configmap-name  # 前置检查检测的configmap名称
+      value: "tke-chaos-precheck-resource"
+    - name: precheck-configmap-namespace  # 前置检查检测的configmap命名空间
+      value: "tke-chaos-test"
+    - name: precheck-pods-health-ratio  # 检测集群pods健康率, 0.9表示90%, 当pods健康率小于该值时, 将不允许测试
+      value: "0.9"
+    - name: precheck-nodes-health-ratio  # 集群节点健康率, 0.9表示90%, 当节点健康率小于该值时, 将不允许测试
+      value: "0.9"
+
+    # 资源创建参数
+    - name: enable-resource-create  # 演练开始前是否创建资源, 模拟现网集群资源规模
+      value: "false"
+    - name: resource-create-image  # 资源创建工具镜像
+      value: "{{workflow.parameters.chaos-image}}"
+    - name: resource-create-namespace  # 创建资源所在的命名空间
+      value: "tke-chaos-test"
+    - name: resource-create-object-type  # 创建资源类型支持, pods/configmaps
+      value: "pods"
+    - name: resource-create-object-size-bytes  # 创建资源大小, 单位字节
+      value: "10000"
+    - name: resource-create-object-count  # 创建资源数量
+      value: "10"
+    - name: resource-create-qps  # 创建资源QPS
+      value: "10"
+
+    # 集群状态采集参数
+    - name: cluster-status-image  # 集群状态检查工具镜像
+      value: "{{workflow.parameters.chaos-image}}"
+
+    # 压测参数
+    - name: enable-apiserver-overload  # apiserver-overload step 执行开关
+      value: "true"
+    - name: inject-stress-image  # 故障注入工具镜像
+      value: "{{workflow.parameters.chaos-image}}"
+    - name: inject-stress-object-type  # 故障注入时, list的资源对象类型, 支持pods/configmaps
+      value: "{{workflow.parameters.resource-create-object-type}}"
+    - name: from-cache  # 构造apiserver高负载时, 置为true, 构造etcd高负载时, 置为false
+      value: "true"
+    - name: inject-stress-user-agent  # 发压端UserAgent, 如: "kubestress/1.0.0"
+      value: "kubestress/v0.0.1"
+    - name: inject-stress-concurrency  # 发压端并发数
+      value: "1"
+    - name: inject-stress-list-qps  # 每个发压端的QPS
+      value: "100"
+    - name: inject-stress-total-duration  # 故障注入总时长, 单位秒
+      value: "30s"
+
+    # apf限流参数
+    - name: enable-apf  # 是否启用apf限速
+      value: "false"
+    - name: apf-user-agent  # 限速的客户端UserAgent, 如: "kubestress/1.0.0"
+      value: "{{workflow.parameters.inject-stress-user-agent}}"
+    - name: apf-manifest  # apf限速的yaml配置, 包括PriorityLevelConfiguration、FlowSchema资源
+      value: |
+        ---
+        apiVersion: flowcontrol.apiserver.k8s.io/v1
+        kind: PriorityLevelConfiguration
+        metadata:
+          annotations:
+            # tke.cloud.tencent.com/objects-seats-rule: '{"objectsToSeats":[{"objects":1000,"seats":10},{"objects":10000,"seats":30},{"objects":20000,"seats":40},{"objects":50000,"seats":101}]}'
+            tke.cloud.tencent.com/objects-seats-rule: '{"objectsToSeats":[{"objects":1000,"seats":1000}]}'
+          name: tke-chaos
+        spec:
+          limited:
+            limitResponse:
+              queuing:
+                handSize: 6
+                queueLengthLimit: 50
+                queues: 128
+              type: Queue
+            nominalConcurrencyShares: 1
+            borrowingLimitPercent: 0
+            lendablePercent: 0
+          type: Limited
+        ---
+        apiVersion: flowcontrol.apiserver.k8s.io/v1
+        kind: FlowSchema
+        metadata:
+          name: tke-chaos
+        spec:
+          distinguisherMethod:
+            type: ByUser
+          matchingPrecedence: 1
+          priorityLevelConfiguration:
+            name: tke-chaos
+          rules:
+          - resourceRules:
+            - apiGroups:
+              - '*'
+              clusterScope: true
+              namespaces:
+              - '*'
+              resources:
+              - 'pods'
+              - 'configmaps'
+              - 'secrets'
+              verbs:
+              - 'list'
+            subjects:
+            - userAgent:
+                nameRegexp: "^({{workflow.parameters.apf-user-agent}}).*"
+              kind: UserAgent
+
+    # etcd过载保护参数
+    - name: enable-etcd-overload-protect  # 是否启用etcd过载保护
+      value: "false"
+    - name: etcd-overload-protect-user-agent  # 过载保护的客户端UserAgent, 如: "kubestress/1.0.0"
+      value: "{{workflow.parameters.inject-stress-user-agent}}"
+    - name: etcd-overload-protect-manifest
+      value: |
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: tke-request-match-config
+          namespace: kube-system
+        data:
+            readcache: '{"rules":[{"resource":"pods","userAgents":["{{workflow.parameters.etcd-overload-protect-user-agent}}"]},{"resource":"configmaps","userAgents":["{{workflow.parameters.etcd-overload-protect-user-agent}}"]}]}'
+  templates:
+  - name: main
+    steps:
+    - - name: create-apf  # 演练开始前, 创建apf限速
+        arguments:
+          parameters:
+          - name: action
+            value: "apply"
+          - name: manifest
+            value: "{{workflow.parameters.apf-manifest}}"
+          - name: kubeconfig-secret-name  # 测试remote cluster填该字段(选填)
+            value: "{{workflow.parameters.kubeconfig-secret-name}}"
+        templateRef:
+          name:  apf-orchestrate
+          template: apf-orchestrate
+          clusterScope: true
+        when: "'{{workflow.parameters.enable-apf}}' == 'true'"
+    - - name: create-etcd-overload-protect-config  # 创建etcd过载保护配置
+        arguments:
+          parameters:
+          - name: action
+            value: "apply"
+          - name: manifest
+            value: "{{workflow.parameters.etcd-overload-protect-manifest}}"
+          - name: kubeconfig-secret-name
+            value: "{{workflow.parameters.kubeconfig-secret-name}}"
+        templateRef:
+          name:  etcd-protect-cm-orchestrate
+          template: etcd-protect-cm-orchestrate
+          clusterScope: true
+        when: "'{{workflow.parameters.enable-etcd-overload-protect}}' == 'true'"
+    - - name: apiserver-overload
+        arguments:
+          parameters:
+          - name: cluster-id  # 演练集群ID
+            value: "{{workflow.parameters.cluster-id}}"
+          - name: enable-resource-create  # 演练开始前是否创建资源, 模拟资源规模
+            value: "{{workflow.parameters.enable-resource-create}}"
+          - name: webhook-url  # 企业微信群webhook地址
+            value: "{{workflow.parameters.webhook-url}}"
+          - name: kubeconfig-secret-name  # 测试remote cluster填该字段, 如未填些, 则测试当前集群(选填)
+            value: "{{workflow.parameters.kubeconfig-secret-name}}"
+          - name: chaos-type  # 演练类型
+            value: "{{workflow.parameters.chaos-type}}"
+          # precheck参数
+          - name: precheck-cluster-image  # 前置检查工具镜像
+            value: "{{workflow.parameters.precheck-cluster-image}}"
+          - name: check-configmap-name  # 前置检查检测的configmap名称
+            value: "{{workflow.parameters.precheck-configmap-name}}"
+          - name: check-configmap-namespace  # 前置检查检测的configmap命名空间
+            value: "{{workflow.parameters.precheck-configmap-namespace}}"
+          - name: pods-health-ratio  # 检测集群pods健康率, 0.5表示50%, 当pods健康率小于该值时, 将不允许测试
+            value: "{{workflow.parameters.precheck-pods-health-ratio}}"
+          - name: nodes-health-ratio  # 集群节点健康率, 0.9表示90%, 当节点健康率小于该值时, 将不允许测试
+            value: "{{workflow.parameters.precheck-nodes-health-ratio}}"
+          # 资源创建参数
+          - name: resource-create-image  # 资源创建工具镜像
+            value: "{{workflow.parameters.chaos-image}}"
+          - name: resource-create-namespace  # 创建资源所在的命名空间
+            value: "{{workflow.parameters.resource-create-namespace}}"
+          - name: resource-create-object-type  # 创建资源类型支持, pods/configmaps
+            value: "{{workflow.parameters.resource-create-object-type}}"
+          - name: resource-create-object-size-bytes  # 创建资源大小, 单位字节
+            value: "{{workflow.parameters.resource-create-object-size-bytes}}"
+          - name: resource-create-object-count  # 创建资源数量
+            value: "{{workflow.parameters.resource-create-object-count}}"
+          - name: resource-create-qps  # 创建资源QPS
+            value: "{{workflow.parameters.resource-create-qps}}"
+          # 集群状态采集参数
+          - name: cluster-status-image  # 集群状态检查工具镜像
+            value: "{{workflow.parameters.cluster-status-image}}"
+          # 压测参数
+          - name: inject-stress-image  # 故障注入工具镜像
+            value: "{{workflow.parameters.inject-stress-image}}"
+          - name: inject-stress-list-object-type  # 故障注入时, list的资源对象类型, 支持pods/configmaps
+            value: "{{workflow.parameters.inject-stress-object-type}}"
+          - name: from-cache  # 构造apiserver高负载时, 置为true, 构造etcd高负载时, 置为false
+            value: "{{workflow.parameters.from-cache}}"
+          - name: inject-stress-user-agent  # 发压端UserAgent, 如: "kubestress/1.0.0"
+            value: "{{workflow.parameters.inject-stress-user-agent}}"
+          - name: inject-stress-concurrency  # 发压端并发数
+            value: "{{workflow.parameters.inject-stress-concurrency}}"
+          - name: inject-stress-list-qps  # 每个发压端的QPS
+            value: "{{workflow.parameters.inject-stress-list-qps}}"
+          - name: inject-stress-total-duration  # 故障注入总时长, 单位秒
+            value: "{{workflow.parameters.inject-stress-total-duration}}"
+        templateRef:
+          name: apiserver-load-test-template
+          template: main
+          clusterScope: true
+        when: "'{{workflow.parameters.enable-apiserver-overload}}' == 'true'"
+    - - name: delete-apf  # 演练结束, 删除apf限速
+        arguments:
+          parameters:
+          - name: action
+            value: "delete"
+          - name: manifest
+            value: "{{workflow.parameters.apf-manifest}}"
+          - name: kubeconfig-secret-name
+            value: "{{workflow.parameters.kubeconfig-secret-name}}"
+        templateRef:
+          name:  apf-orchestrate
+          template: apf-orchestrate
+          clusterScope: true
+        when: "'{{workflow.parameters.enable-apf}}' == 'true'"
+    - - name: delete-etcd-overload-protect-config  # 演练结束, 删除etcd过载保护配置
+        continueOn:
+          failed: true
+          error: true
+        arguments:
+          parameters:
+          - name: action
+            value: "delete"
+          - name: manifest
+            value: "{{workflow.parameters.etcd-overload-protect-manifest}}"
+          - name: kubeconfig-secret-name
+            value: "{{workflow.parameters.kubeconfig-secret-name}}"
+        templateRef:
+          name:  etcd-protect-cm-orchestrate
+          template: etcd-protect-cm-orchestrate
+          clusterScope: true
+        when: "'{{workflow.parameters.enable-etcd-overload-protect}}' == 'true'"

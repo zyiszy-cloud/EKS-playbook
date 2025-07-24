@@ -1,0 +1,56 @@
+---
+# 功能说明：创建或删除etcd过载保护的kube-system/tke-request-match-config ConfigMap, 详细见: 
+# https://doc.weixin.qq.com/doc/w3_ACYAlwbdAFwFuPA3vx1TFyen963Cr?scode=AJEAIQdfAAoqbdLlUsAVoAPgaKAKk
+# 参数说明:
+#   etcd-protect-cm-orchestrate参数说明
+#     1. action: 操作类型，apply/delete
+#     2. kubeconfig-secret-name: 用于指定接入的K8s集群的kubeconfig凭证的secret名称, 如果为空，则默认为当前集群
+#     3. manifest: 过载保护的ConfigMap的yaml内容, 使用默认值
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: etcd-protect-cm-orchestrate
+spec:
+  arguments:
+    parameters:
+    - name: user-agent
+      value: "kubestress"
+    # etcd-protect-cm-orchestrate参数
+    - name: action
+      value: "apply"
+    - name: manifest
+      value: |
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: tke-request-match-config
+          namespace: kube-system
+        data:
+            readcache: '{"rules":[{"resource":"pods","userAgents":["{{workflow.parameters.user-agent}}"]},{"resource":"configmaps","userAgents":["{{workflow.parameters.user-agent}}"]}]}'
+  entrypoint: etcd-protect-cm-orchestrate
+  templates:
+  - name: etcd-protect-cm-orchestrate
+    inputs:
+      parameters:
+      - name: action  # 操作类型，create/apply/delete
+        default: "apply"
+        description: "操作类型, create/apply/delete"
+      - name: manifest  # 操作的yaml配置
+        description: "操作的yaml配置"
+      - name: kubeconfig-secret-name   # 操作的集群kubeconfig secret名称, 当为空时, 则为incluster
+        description: "操作的集群kubeconfig secret名称, 当为空时, 则为incluster"
+    dag:
+      tasks:
+      - name: kubectl-cmd
+        arguments:
+          parameters:
+          - name: action
+            value: "{{inputs.parameters.action}}"
+          - name: manifest
+            value: "{{inputs.parameters.manifest}}"
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+        templateRef:
+          name: kubectl-cmd
+          template: kubectl-mutating-cmd
+          clusterScope: true

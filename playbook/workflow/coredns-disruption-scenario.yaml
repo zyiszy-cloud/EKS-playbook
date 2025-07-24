@@ -1,0 +1,27 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  labels:
+    coredns-disruption-scenario: "true"
+  name: coredns-disruption-scenario
+  namespace: tke-chaos-test
+spec:
+  entrypoint: main
+  serviceAccountName: tke-chaos
+  arguments:
+    parameters:
+    - name: disruption-duration
+      value: "30s"
+    - name: workload-type
+      value: "deployment"
+    - name: workload-name
+      value: "coredns"
+    - name: workload-namespace
+      value: "kube-system"
+    - name: kubeconfig-secret-name
+      value: "dest-cluster-kubeconfig"
+  serviceAccountName: tke-chaos
+  workflowTemplateRef:
+    name: workload-disruption-template
+    clusterScope: true
