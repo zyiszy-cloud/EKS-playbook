@@ -1,0 +1,555 @@
+---
+# 功能说明：腾讯云超级节点演练模板
+# 支持的演练场景：
+# 1. schedule-pressure: 超级节点Pod调度压力测试
+# 2. resource-limit: 超级节点资源限制测试
+# 3. failure-simulation: 超级节点故障模拟测试
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: supernode-template
+spec:
+  entrypoint: main
+  serviceAccountName: tke-chaos
+  templates:
+  - name: main
+    inputs:
+      parameters:
+      - name: cluster-id
+        description: "演练集群ID"
+      - name: webhook-url
+        description: "企业微信群webhook地址"
+        default: ""
+      - name: chaos-type
+        description: "演练类型"
+        default: "supernode chaos test"
+      - name: scenario-type
+        description: "演练场景类型: schedule-pressure/resource-limit/failure-simulation"
+      - name: supernode-selector
+        description: "超级节点选择器，如: node.kubernetes.io/instance-type=eklet"
+        default: "node.kubernetes.io/instance-type=eklet"
+      - name: test-duration
+        description: "测试持续时间"
+        default: "60s"
+      - name: test-pod-count
+        description: "测试Pod数量"
+        default: "50"
+      - name: cpu-stress-cores
+        description: "CPU压力测试核心数"
+        default: "2"
+      - name: memory-stress-size
+        description: "内存压力测试大小"
+        default: "1G"
+      - name: kubeconfig-secret-name
+        description: "目标集群kubeconfig secret名称"
+      - name: precheck-cluster-image
+        description: "前置检查工具镜像"
+      - name: check-configmap-name
+        default: "tke-chaos-precheck-resource"
+      - name: check-configmap-namespace
+        default: "tke-chaos-test"
+      - name: pods-health-ratio
+        description: "Pod健康率阈值"
+        default: "0.9"
+      - name: nodes-health-ratio
+        description: "节点健康率阈值"
+        default: "0.9"
+    steps:
+    - - name: notify-start
+        arguments:
+          parameters:
+          - name: webhook-url
+            value: "{{inputs.parameters.webhook-url}}"
+          - name: cluster-id
+            value: "{{inputs.parameters.cluster-id}}"
+          - name: chaos-type
+            value: "{{inputs.parameters.chaos-type}}"
+          - name: scenario-type
+            value: "{{inputs.parameters.scenario-type}}"
+          - name: action
+            value: "start"
+        template: notify
+        when: "'{{inputs.parameters.webhook-url}}' != ''"
+    
+    - - name: precheck
+        arguments:
+          parameters:
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+          - name: precheck-cluster-image
+            value: "{{inputs.parameters.precheck-cluster-image}}"
+          - name: check-configmap-name
+            value: "{{inputs.parameters.check-configmap-name}}"
+          - name: check-configmap-namespace
+            value: "{{inputs.parameters.check-configmap-namespace}}"
+          - name: pods-health-ratio
+            value: "{{inputs.parameters.pods-health-ratio}}"
+          - name: nodes-health-ratio
+            value: "{{inputs.parameters.nodes-health-ratio}}"
+          - name: supernode-selector
+            value: "{{inputs.parameters.supernode-selector}}"
+        template: precheck
+    
+    - - name: execute-scenario
+        arguments:
+          parameters:
+          - name: scenario-type
+            value: "{{inputs.parameters.scenario-type}}"
+          - name: supernode-selector
+            value: "{{inputs.parameters.supernode-selector}}"
+          - name: test-duration
+            value: "{{inputs.parameters.test-duration}}"
+          - name: test-pod-count
+            value: "{{inputs.parameters.test-pod-count}}"
+          - name: cpu-stress-cores
+            value: "{{inputs.parameters.cpu-stress-cores}}"
+          - name: memory-stress-size
+            value: "{{inputs.parameters.memory-stress-size}}"
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+        template: execute-scenario
+    
+    - - name: cleanup
+        arguments:
+          parameters:
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+        template: cleanup
+    
+    - - name: notify-end
+        arguments:
+          parameters:
+          - name: webhook-url
+            value: "{{inputs.parameters.webhook-url}}"
+          - name: cluster-id
+            value: "{{inputs.parameters.cluster-id}}"
+          - name: chaos-type
+            value: "{{inputs.parameters.chaos-type}}"
+          - name: scenario-type
+            value: "{{inputs.parameters.scenario-type}}"
+          - name: action
+            value: "end"
+        template: notify
+        when: "'{{inputs.parameters.webhook-url}}' != ''"
+
+  - name: precheck
+    inputs:
+      parameters:
+      - name: kubeconfig-secret-name
+      - name: precheck-cluster-image
+      - name: check-configmap-name
+      - name: check-configmap-namespace
+      - name: pods-health-ratio
+      - name: nodes-health-ratio
+      - name: supernode-selector
+    script:
+      image: "{{inputs.parameters.precheck-cluster-image}}"
+      command: [bash]
+      source: |
+        #!/bin/bash
+        set -e
+        
+        echo "开始超级节点演练前置检查..."
+        
+        # 检查集群中是否存在超级节点
+        SUPERNODE_COUNT=$(kubectl get nodes -l "{{inputs.parameters.supernode-selector}}" --no-headers 2>/dev/null | wc -l)
+        if [ "$SUPERNODE_COUNT" -eq 0 ]; then
+          echo "错误: 集群中未找到超级节点 (selector: {{inputs.parameters.supernode-selector}})"
+          exit 1
+        fi
+        echo "发现 $SUPERNODE_COUNT 个超级节点"
+        
+        # 检查预检查资源
+        kubectl get -n "{{inputs.parameters.check-configmap-namespace}}" configmap "{{inputs.parameters.check-configmap-name}}" > /dev/null
+        echo "预检查资源验证通过"
+        
+        # 检查集群健康状态
+        TOTAL_PODS=$(kubectl get pods --all-namespaces --no-headers 2>/dev/null | wc -l)
+        RUNNING_PODS=$(kubectl get pods --all-namespaces --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l)
+        
+        if [ "$TOTAL_PODS" -gt 0 ]; then
+          POD_HEALTH_RATIO=$(echo "scale=2; $RUNNING_PODS / $TOTAL_PODS" | bc -l)
+          REQUIRED_RATIO={{inputs.parameters.pods-health-ratio}}
+          if (( $(echo "$POD_HEALTH_RATIO < $REQUIRED_RATIO" | bc -l) )); then
+            echo "错误: Pod健康率 ($POD_HEALTH_RATIO) 低于要求 ($REQUIRED_RATIO)"
+            exit 1
+          fi
+          echo "Pod健康率检查通过: $POD_HEALTH_RATIO"
+        fi
+        
+        TOTAL_NODES=$(kubectl get nodes --no-headers 2>/dev/null | wc -l)
+        READY_NODES=$(kubectl get nodes --no-headers 2>/dev/null | grep " Ready " | wc -l)
+        
+        if [ "$TOTAL_NODES" -gt 0 ]; then
+          NODE_HEALTH_RATIO=$(echo "scale=2; $READY_NODES / $TOTAL_NODES" | bc -l)
+          REQUIRED_RATIO={{inputs.parameters.nodes-health-ratio}}
+          if (( $(echo "$NODE_HEALTH_RATIO < $REQUIRED_RATIO" | bc -l) )); then
+            echo "错误: 节点健康率 ($NODE_HEALTH_RATIO) 低于要求 ($REQUIRED_RATIO)"
+            exit 1
+          fi
+          echo "节点健康率检查通过: $NODE_HEALTH_RATIO"
+        fi
+        
+        echo "超级节点演练前置检查完成"
+      volumeMounts:
+      - name: kubeconfig
+        mountPath: /root/.kube
+      volumes:
+      - name: kubeconfig
+        secret:
+          secretName: "{{inputs.parameters.kubeconfig-secret-name}}"
+
+  - name: notify
+    inputs:
+      parameters:
+      - name: webhook-url
+      - name: cluster-id
+      - name: chaos-type
+      - name: scenario-type
+      - name: action
+    script:
+      image: "curlimages/curl:7.85.0"
+      command: [sh]
+      source: |
+        #!/bin/sh
+        if [ "{{inputs.parameters.webhook-url}}" = "" ]; then
+          echo "webhook-url为空，跳过通知"
+          exit 0
+        fi
+        
+        ACTION="{{inputs.parameters.action}}"
+        if [ "$ACTION" = "start" ]; then
+          MESSAGE="🚀 超级节点演练开始\n集群ID: {{inputs.parameters.cluster-id}}\n演练类型: {{inputs.parameters.chaos-type}}\n演练场景: {{inputs.parameters.scenario-type}}"
+        else
+          MESSAGE="✅ 超级节点演练结束\n集群ID: {{inputs.parameters.cluster-id}}\n演练类型: {{inputs.parameters.chaos-type}}\n演练场景: {{inputs.parameters.scenario-type}}"
+        fi
+        
+        curl -X POST "{{inputs.parameters.webhook-url}}" \
+          -H "Content-Type: application/json" \
+          -d "{\"msgtype\":\"text\",\"text\":{\"content\":\"$MESSAGE\"}}"
+
+  - name: execute-scenario
+    inputs:
+      parameters:
+      - name: scenario-type
+      - name: supernode-selector
+      - name: test-duration
+      - name: test-pod-count
+      - name: cpu-stress-cores
+      - name: memory-stress-size
+      - name: kubeconfig-secret-name
+    dag:
+      tasks:
+      - name: schedule-pressure-test
+        arguments:
+          parameters:
+          - name: supernode-selector
+            value: "{{inputs.parameters.supernode-selector}}"
+          - name: test-duration
+            value: "{{inputs.parameters.test-duration}}"
+          - name: test-pod-count
+            value: "{{inputs.parameters.test-pod-count}}"
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+        template: schedule-pressure-test
+        when: "'{{inputs.parameters.scenario-type}}' == 'schedule-pressure'"
+      
+      - name: resource-limit-test
+        arguments:
+          parameters:
+          - name: supernode-selector
+            value: "{{inputs.parameters.supernode-selector}}"
+          - name: test-duration
+            value: "{{inputs.parameters.test-duration}}"
+          - name: cpu-stress-cores
+            value: "{{inputs.parameters.cpu-stress-cores}}"
+          - name: memory-stress-size
+            value: "{{inputs.parameters.memory-stress-size}}"
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+        template: resource-limit-test
+        when: "'{{inputs.parameters.scenario-type}}' == 'resource-limit'"
+      
+      - name: failure-simulation-test
+        arguments:
+          parameters:
+          - name: supernode-selector
+            value: "{{inputs.parameters.supernode-selector}}"
+          - name: test-duration
+            value: "{{inputs.parameters.test-duration}}"
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+        template: failure-simulation-test
+        when: "'{{inputs.parameters.scenario-type}}' == 'failure-simulation'"
+
+  - name: schedule-pressure-test
+    inputs:
+      parameters:
+      - name: supernode-selector
+      - name: test-duration
+      - name: test-pod-count
+      - name: kubeconfig-secret-name
+    script:
+      image: "bitnami/kubectl:1.32.4"
+      command: [bash]
+      source: |
+        #!/bin/bash
+        set -e
+        
+        echo "开始超级节点调度压力测试..."
+        echo "目标超级节点选择器: {{inputs.parameters.supernode-selector}}"
+        echo "测试Pod数量: {{inputs.parameters.test-pod-count}}"
+        echo "测试持续时间: {{inputs.parameters.test-duration}}"
+        
+        # 创建测试命名空间
+        kubectl create namespace tke-supernode-test || true
+        
+        # 解析超级节点选择器
+        SELECTOR_KEY=$(echo "{{inputs.parameters.supernode-selector}}" | cut -d'=' -f1)
+        SELECTOR_VALUE=$(echo "{{inputs.parameters.supernode-selector}}" | cut -d'=' -f2)
+        
+        # 批量创建Pod到超级节点
+        POD_COUNT={{inputs.parameters.test-pod-count}}
+        for i in $(seq 1 $POD_COUNT); do
+          cat <<EOF | kubectl apply -f -
+        apiVersion: v1
+        kind: Pod
+        metadata:
+          name: supernode-test-pod-$i
+          namespace: tke-supernode-test
+          labels:
+            test: supernode-pressure
+            batch: pressure-test
+        spec:
+          nodeSelector:
+            $SELECTOR_KEY: $SELECTOR_VALUE
+          containers:
+          - name: test-container
+            image: nginx:alpine
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+              limits:
+                cpu: 200m
+                memory: 256Mi
+          restartPolicy: Never
+        EOF
+        done
+        
+        echo "已创建 $POD_COUNT 个测试Pod，等待调度..."
+        
+        # 等待Pod调度完成
+        sleep 30
+        
+        # 检查调度结果
+        SCHEDULED_PODS=$(kubectl get pods -n tke-supernode-test -l test=supernode-pressure --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l)
+        TOTAL_PODS=$(kubectl get pods -n tke-supernode-test -l test=supernode-pressure --no-headers 2>/dev/null | wc -l)
+        
+        echo "调度结果: $SCHEDULED_PODS/$TOTAL_PODS 个Pod成功调度到超级节点"
+        
+        # 显示超级节点上的Pod分布
+        echo "超级节点Pod分布情况:"
+        kubectl get pods -n tke-supernode-test -l test=supernode-pressure -o wide 2>/dev/null | head -10
+        
+        # 持续监控指定时间
+        echo "开始监控 {{inputs.parameters.test-duration}}..."
+        
+        # 转换时间格式 (如 60s -> 60)
+        DURATION_SECONDS=$(echo "{{inputs.parameters.test-duration}}" | sed 's/s$//')
+        sleep $DURATION_SECONDS
+        
+        # 最终状态检查
+        FINAL_RUNNING=$(kubectl get pods -n tke-supernode-test -l test=supernode-pressure --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l)
+        echo "测试结束时运行中的Pod数量: $FINAL_RUNNING"
+        
+        echo "超级节点调度压力测试完成"
+      volumeMounts:
+      - name: kubeconfig
+        mountPath: /root/.kube
+      volumes:
+      - name: kubeconfig
+        secret:
+          secretName: "{{inputs.parameters.kubeconfig-secret-name}}"
+
+  - name: resource-limit-test
+    inputs:
+      parameters:
+      - name: supernode-selector
+      - name: test-duration
+      - name: cpu-stress-cores
+      - name: memory-stress-size
+      - name: kubeconfig-secret-name
+    script:
+      image: "bitnami/kubectl:1.32.4"
+      command: [bash]
+      source: |
+        #!/bin/bash
+        set -e
+        
+        echo "开始超级节点资源限制测试..."
+        echo "CPU压力核心数: {{inputs.parameters.cpu-stress-cores}}"
+        echo "内存压力大小: {{inputs.parameters.memory-stress-size}}"
+        
+        # 创建测试命名空间
+        kubectl create namespace tke-supernode-test || true
+        
+        # 解析超级节点选择器
+        SELECTOR_KEY=$(echo "{{inputs.parameters.supernode-selector}}" | cut -d'=' -f1)
+        SELECTOR_VALUE=$(echo "{{inputs.parameters.supernode-selector}}" | cut -d'=' -f2)
+        
+        # 创建高资源消耗的Pod
+        cat <<EOF | kubectl apply -f -
+        apiVersion: v1
+        kind: Pod
+        metadata:
+          name: supernode-resource-test
+          namespace: tke-supernode-test
+          labels:
+            test: supernode-resource
+        spec:
+          nodeSelector:
+            $SELECTOR_KEY: $SELECTOR_VALUE
+          containers:
+          - name: cpu-stress
+            image: progrium/stress
+            args: ["--cpu", "{{inputs.parameters.cpu-stress-cores}}", "--timeout", "{{inputs.parameters.test-duration}}"]
+            resources:
+              requests:
+                cpu: "{{inputs.parameters.cpu-stress-cores}}000m"
+                memory: "{{inputs.parameters.memory-stress-size}}"
+              limits:
+                cpu: "4000m"
+                memory: "2Gi"
+          - name: memory-stress
+            image: progrium/stress
+            args: ["--vm", "1", "--vm-bytes", "{{inputs.parameters.memory-stress-size}}", "--timeout", "{{inputs.parameters.test-duration}}"]
+            resources:
+              requests:
+                memory: "{{inputs.parameters.memory-stress-size}}"
+              limits:
+                memory: "2Gi"
+        EOF
+        
+        echo "已创建资源压力测试Pod，监控执行情况..."
+        
+        # 监控Pod状态
+        kubectl wait --for=condition=Ready pod/supernode-resource-test -n tke-supernode-test --timeout=60s || {
+          echo "警告: 资源压力测试Pod未能正常启动"
+          kubectl describe pod supernode-resource-test -n tke-supernode-test
+        }
+        
+        # 转换时间格式
+        DURATION_SECONDS=$(echo "{{inputs.parameters.test-duration}}" | sed 's/s$//')
+        sleep $DURATION_SECONDS
+        
+        echo "超级节点资源限制测试完成"
+      volumeMounts:
+      - name: kubeconfig
+        mountPath: /root/.kube
+      volumes:
+      - name: kubeconfig
+        secret:
+          secretName: "{{inputs.parameters.kubeconfig-secret-name}}"
+
+  - name: failure-simulation-test
+    inputs:
+      parameters:
+      - name: supernode-selector
+      - name: test-duration
+      - name: kubeconfig-secret-name
+    script:
+      image: "bitnami/kubectl:1.32.4"
+      command: [bash]
+      source: |
+        #!/bin/bash
+        set -e
+        
+        echo "开始超级节点故障模拟测试..."
+        
+        # 创建测试命名空间
+        kubectl create namespace tke-supernode-test || true
+        
+        # 解析超级节点选择器
+        SELECTOR_KEY=$(echo "{{inputs.parameters.supernode-selector}}" | cut -d'=' -f1)
+        SELECTOR_VALUE=$(echo "{{inputs.parameters.supernode-selector}}" | cut -d'=' -f2)
+        
+        # 创建会导致Pod失败的测试
+        cat <<EOF | kubectl apply -f -
+        apiVersion: v1
+        kind: Pod
+        metadata:
+          name: supernode-failure-test-1
+          namespace: tke-supernode-test
+          labels:
+            test: supernode-failure
+        spec:
+          nodeSelector:
+            $SELECTOR_KEY: $SELECTOR_VALUE
+          containers:
+          - name: exit-container
+            image: busybox
+            command: ["sh", "-c", "echo 'Testing failure scenario'; sleep 10; exit 1"]
+          restartPolicy: Never
+        ---
+        apiVersion: v1
+        kind: Pod
+        metadata:
+          name: supernode-failure-test-2
+          namespace: tke-supernode-test
+          labels:
+            test: supernode-failure
+        spec:
+          nodeSelector:
+            $SELECTOR_KEY: $SELECTOR_VALUE
+          containers:
+          - name: oom-container
+            image: progrium/stress
+            args: ["--vm", "1", "--vm-bytes", "10G", "--timeout", "30s"]
+            resources:
+              limits:
+                memory: "1Gi"
+          restartPolicy: Never
+        EOF
+        
+        echo "已创建故障模拟测试Pod，观察超级节点处理异常Pod的行为..."
+        
+        # 转换时间格式
+        DURATION_SECONDS=$(echo "{{inputs.parameters.test-duration}}" | sed 's/s$//')
+        sleep $DURATION_SECONDS
+        
+        # 检查Pod状态
+        echo "故障测试Pod状态:"
+        kubectl get pods -n tke-supernode-test -l test=supernode-failure -o wide
+        
+        echo "超级节点故障模拟测试完成"
+      volumeMounts:
+      - name: kubeconfig
+        mountPath: /root/.kube
+      volumes:
+      - name: kubeconfig
+        secret:
+          secretName: "{{inputs.parameters.kubeconfig-secret-name}}"
+
+  - name: cleanup
+    inputs:
+      parameters:
+      - name: kubeconfig-secret-name
+    script:
+      image: "bitnami/kubectl:1.32.4"
+      command: [bash]
+      source: |
+        #!/bin/bash
+        echo "开始清理超级节点测试资源..."
+        
+        # 删除测试命名空间及所有资源
+        kubectl delete namespace tke-supernode-test --ignore-not-found=true
+        
+        echo "超级节点测试资源清理完成"
+      volumeMounts:
+      - name: kubeconfig
+        mountPath: /root/.kube
+      volumes:
+      - name: kubeconfig
+        secret:
+          secretName: "{{inputs.parameters.kubeconfig-secret-name}}"

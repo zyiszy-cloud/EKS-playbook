@@ -152,3 +152,63 @@ kubectl create -f workflow/managed-cluster-master-component/restore-apiserver.ya
 
 ## 自维护集群master组件停服
 TODO
+
+## 超级节点演练
+
+**playbook**：`workflow/supernode-scenario.yaml`
+
+该场景针对腾讯云TKE超级节点进行演练测试，支持三种演练场景：
+
+### 演练场景类型
+
+1. **调度压力测试 (schedule-pressure)**：批量创建Pod到超级节点，测试超级节点的调度能力和承载能力
+2. **资源限制测试 (resource-limit)**：创建高CPU和内存消耗的Pod，测试超级节点的资源管理和限制能力
+3. **故障模拟测试 (failure-simulation)**：创建会失败的Pod，测试超级节点对异常Pod的处理能力
+
+### 演练流程
+
+- **演练校验**：检查集群中是否存在超级节点，验证集群健康状态
+- **执行演练**：根据选择的场景类型执行相应的测试
+- **资源清理**：演练完成后自动清理测试资源
+
+**参数说明**
+
+| 参数名称 | 类型 | 默认值 | 说明 |
+|---------|---------|------|--------|
+| `kubeconfig-secret-name` | `string` | `dest-cluster-kubeconfig` | `目标集群`接入`kubeconfig`的`secret名称` |
+| `webhook-url` | `string` | "" | 企业微信群`webhook地址` |
+| `scenario-type` | `string` | `schedule-pressure` | 演练场景类型：`schedule-pressure`/`resource-limit`/`failure-simulation` |
+| `supernode-selector` | `string` | `node.kubernetes.io/instance-type=eklet` | 超级节点选择器 |
+| `test-duration` | `string` | `60s` | 测试持续时间 |
+| `test-pod-count` | `int` | `50` | 测试Pod数量（仅用于调度压力测试） |
+| `cpu-stress-cores` | `int` | `2` | CPU压力测试核心数（仅用于资源限制测试） |
+| `memory-stress-size` | `string` | `1G` | 内存压力测试大小（仅用于资源限制测试） |
+| `precheck-pods-health-ratio` | `float` | `0.9` | `目标集群`中`Pod`健康率阈值 |
+| `precheck-nodes-health-ratio` | `float` | `0.9` | `目标集群`中`Node`健康率阈值 |
+
+### 使用示例
+
+**调度压力测试**：
+```bash
+# 修改scenario-type为schedule-pressure，test-pod-count为100
+kubectl create -f playbook/workflow/supernode-scenario.yaml
+```
+
+**资源限制测试**：
+```bash
+# 修改scenario-type为resource-limit，cpu-stress-cores为4，memory-stress-size为2G
+kubectl create -f playbook/workflow/supernode-scenario.yaml
+```
+
+**故障模拟测试**：
+```bash
+# 修改scenario-type为failure-simulation
+kubectl create -f playbook/workflow/supernode-scenario.yaml
+```
+
+**注意事项**
+
+1. 确保目标集群中存在超级节点（默认选择器：`node.kubernetes.io/instance-type=eklet`）
+2. 超级节点演练会在`tke-supernode-test`命名空间中创建测试资源
+3. 演练完成后会自动清理所有测试资源
+4. 建议在非生产环境或维护窗口期执行资源限制和故障模拟测试

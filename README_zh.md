@@ -99,6 +99,7 @@ kubectl delete -f playbook/workflow/apiserver-overload-scenario.yaml
 | TKE托管集群kube-controller-manager停服演练  | -    |    完成     |        -       | 验证控制器组件故障场景                                       |
 | TKE自维护集群master节点停机        | P1    |    开发中     |  2025-06-30  | 模拟master关机场景                                      |
 | etcd停服演练                     | P1    |    开发中     |  2025-06-30  | 模拟etcd集群故障场景                                      |
+| 超级节点演练                      | P2    |    完成       |      -       | 模拟超级节点调度压力、资源限制和故障场景                        |
 
 ## 常见问题
 1. 为什么要用两个集群来执行演练测试?
