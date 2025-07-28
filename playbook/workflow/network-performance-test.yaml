@@ -1,0 +1,49 @@
+---
+# 网络性能测试工作流
+# Network Performance Test Workflow
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  labels:
+    network-performance-test: "true"
+  name: network-performance-test
+  namespace: tke-chaos-test
+spec:
+  entrypoint: main
+  serviceAccountName: tke-chaos
+  arguments:
+    parameters:
+    - name: test-type  # 测试类型: latency/bandwidth/throughput/all
+      value: "all"
+    - name: client-pods  # 客户端Pod数量
+      value: "5"
+    - name: server-pods  # 服务端Pod数量
+      value: "3"
+    - name: test-duration  # 测试持续时间
+      value: "300s"
+    - name: supernode-selector  # 超级节点选择器
+      value: "node.kubernetes.io/instance-type=eklet"
+    - name: kubeconfig-secret-name  # 目标集群kubeconfig secret名称
+      value: "dest-cluster-kubeconfig"
+  templates:
+  - name: main
+    steps:
+    - - name: network-performance-test
+        arguments:
+          parameters:
+          - name: test-type
+            value: "{{workflow.parameters.test-type}}"
+          - name: client-pods
+            value: "{{workflow.parameters.client-pods}}"
+          - name: server-pods
+            value: "{{workflow.parameters.server-pods}}"
+          - name: test-duration
+            value: "{{workflow.parameters.test-duration}}"
+          - name: supernode-selector
+            value: "{{workflow.parameters.supernode-selector}}"
+          - name: kubeconfig-secret-name
+            value: "{{workflow.parameters.kubeconfig-secret-name}}"
+        templateRef:
+          name: network-performance-template
+          template: main
+          clusterScope: true

@@ -1,0 +1,452 @@
+---
+# 腾讯云超级节点Pod创建压测模板
+# 使用shell内置算术
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: supernode-pod-benchmark-template
+spec:
+  entrypoint: main
+  serviceAccountName: tke-chaos
+  templates:
+  - name: main
+    inputs:
+      parameters:
+      - name: benchmark-type
+        description: "压测类型: concurrent-creation"
+        default: "concurrent-creation"
+      - name: supernode-selector
+        description: "超级节点选择器"
+        default: "node.kubernetes.io/instance-type=eklet"
+      - name: test-duration
+        description: "测试持续时间"
+        default: "60s"
+      - name: target-pod-count
+        description: "目标Pod数量"
+        default: "20"
+      - name: kubeconfig-secret-name
+        description: "目标集群kubeconfig secret名称"
+      - name: precheck-configmap-name
+        default: "tke-chaos-precheck-resource"
+        description: "预检查配置configmap名称"
+      - name: precheck-configmap-namespace
+        default: "tke-chaos-test"
+        description: "预检查配置configmap所在命名空间"
+    steps:
+    - - name: precheck
+        arguments:
+          parameters:
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+          - name: source
+            value: |
+              # 检查预检查资源
+              kubectl get -n {{inputs.parameters.precheck-configmap-namespace}} configmap {{inputs.parameters.precheck-configmap-name}}
+              
+              # 检查超级节点
+              echo "检查超级节点 (selector: {{inputs.parameters.supernode-selector}})..."
+              SUPERNODE_COUNT=$(kubectl get nodes -l "{{inputs.parameters.supernode-selector}}" --no-headers 2>/dev/null | wc -l)
+              if [ "$SUPERNODE_COUNT" -eq 0 ]; then
+                echo "错误: 集群中未找到超级节点 (selector: {{inputs.parameters.supernode-selector}})"
+                exit 1
+              fi
+              echo "发现 $SUPERNODE_COUNT 个超级节点"
+              kubectl get nodes -l "{{inputs.parameters.supernode-selector}}"
+        templateRef:
+          name: kubectl-cmd
+          template: kubectl-script
+          clusterScope: true
+    
+    - - name: execute-benchmark
+        arguments:
+          parameters:
+          - name: benchmark-type
+            value: "{{inputs.parameters.benchmark-type}}"
+          - name: supernode-selector
+            value: "{{inputs.parameters.supernode-selector}}"
+          - name: test-duration
+            value: "{{inputs.parameters.test-duration}}"
+          - name: target-pod-count
+            value: "{{inputs.parameters.target-pod-count}}"
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+        template: execute-benchmark
+    
+    - - name: cleanup
+        arguments:
+          parameters:
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+          - name: source
+            value: |
+              echo "清理超级节点压测资源..."
+              kubectl delete namespace tke-supernode-benchmark --ignore-not-found=true
+              echo "清理完成"
+        templateRef:
+          name: kubectl-cmd
+          template: kubectl-script
+          clusterScope: true
+
+  - name: execute-benchmark
+    inputs:
+      parameters:
+      - name: benchmark-type
+      - name: supernode-selector
+      - name: test-duration
+      - name: target-pod-count
+      - name: kubeconfig-secret-name
+    dag:
+      tasks:
+      - name: concurrent-creation-benchmark
+        arguments:
+          parameters:
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+          - name: source
+            value: |
+              # Shell算术函数定义
+              calc_time_diff() {
+                local start_time=$1
+                local end_time=$2
+                # 正确处理时间戳格式 1234567890.123
+                # 分离秒和毫秒部分
+                local start_sec=${start_time%.*}
+                local start_ms=${start_time#*.}
+                local end_sec=${end_time%.*}
+                local end_ms=${end_time#*.}
+                
+                # 确保毫秒部分是3位数
+                start_ms=$(printf "%03d" "$start_ms" 2>/dev/null || echo "000")
+                end_ms=$(printf "%03d" "$end_ms" 2>/dev/null || echo "000")
+                
+                # 转换为总毫秒数进行计算
+                local start_total_ms=$((start_sec * 1000 + start_ms))
+                local end_total_ms=$((end_sec * 1000 + end_ms))
+                local diff_ms=$((end_total_ms - start_total_ms))
+                
+                # 转换回秒，保留3位小数
+                local diff_sec=$((diff_ms / 1000))
+                local diff_ms_remainder=$((diff_ms % 1000))
+                printf "%d.%03d" $diff_sec $diff_ms_remainder
+              }
+              
+              calc_p99() {
+                local file=$1
+                local count=$(wc -l < "$file" 2>/dev/null || echo "0")
+                if [ "$count" -eq 0 ]; then
+                  echo "0.000"
+                  return
+                fi
+                
+                # 计算P99索引 (count * 99 / 100)，至少为1
+                local p99_index=$(( (count * 99 + 99) / 100 ))
+                if [ $p99_index -lt 1 ]; then
+                  p99_index=1
+                elif [ $p99_index -gt $count ]; then
+                  p99_index=$count
+                fi
+                
+                # 排序并获取P99值
+                sort -n "$file" 2>/dev/null | sed -n "${p99_index}p" || echo "0.000"
+              }
+              
+              calc_avg() {
+                local file=$1
+                local count=$(wc -l < "$file" 2>/dev/null || echo "0")
+                if [ "$count" -eq 0 ]; then
+                  echo "0.000"
+                  return
+                fi
+                
+                local sum=0
+                while read -r time; do
+                  if [ -n "$time" ]; then
+                    # 正确处理时间格式 X.XXX
+                    local time_sec=${time%.*}
+                    local time_ms=${time#*.}
+                    time_ms=$(printf "%03d" "$time_ms" 2>/dev/null || echo "000")
+                    local time_total_ms=$((time_sec * 1000 + time_ms))
+                    sum=$((sum + time_total_ms))
+                  fi
+                done < "$file" 2>/dev/null
+                
+                # 计算平均值并转换回秒
+                local avg_ms=$((sum / count))
+                local avg_sec=$((avg_ms / 1000))
+                local avg_ms_remainder=$((avg_ms % 1000))
+                printf "%d.%03d" $avg_sec $avg_ms_remainder
+              }
+              
+              echo "=== 超级节点Pod创建压测开始（并发创建模式）==="
+              echo "目标选择器: {{inputs.parameters.supernode-selector}}"
+              echo "目标Pod数量: {{inputs.parameters.target-pod-count}}"
+              echo "Pod镜像: nginx:alpine"
+              
+              # 创建测试命名空间
+              kubectl create namespace tke-supernode-benchmark || true
+              
+              # 解析选择器
+              SELECTOR_KEY=$(echo "{{inputs.parameters.supernode-selector}}" | cut -d'=' -f1)
+              SELECTOR_VALUE=$(echo "{{inputs.parameters.supernode-selector}}" | cut -d'=' -f2)
+              
+              # 初始化统计变量
+              POD_COUNT={{inputs.parameters.target-pod-count}}
+              BATCH_SIZE=10
+              
+              # 创建统计文件
+              CREATION_TIMES_FILE="/tmp/pod_creation_times.txt"
+              E2E_TIMES_FILE="/tmp/pod_e2e_times.txt"
+              POD_STATUS_FILE="/tmp/pod_status.txt"
+              > $CREATION_TIMES_FILE
+              > $E2E_TIMES_FILE
+              > $POD_STATUS_FILE
+              
+              echo "开始Pod创建压测..."
+              START_TIME=$(date +%s)
+              CUR_TIME=$(date +%H-%M-%S)
+              BATCH_TIMESTAMP=$(date +%s)
+              
+              # 获取所有可用的超级节点
+              echo "获取可用的超级节点列表..."
+              SUPERNODE_LIST=$(kubectl get nodes -l "$SELECTOR_KEY=$SELECTOR_VALUE" -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n')
+              SUPERNODE_ARRAY=($SUPERNODE_LIST)
+              SUPERNODE_COUNT=${#SUPERNODE_ARRAY[@]}
+              
+              if [ $SUPERNODE_COUNT -eq 0 ]; then
+                echo "错误: 未找到可用的超级节点"
+                exit 1
+              fi
+              
+              echo "发现 $SUPERNODE_COUNT 个超级节点: ${SUPERNODE_ARRAY[*]}"
+              
+              # 创建临时YAML文件
+              TEMP_YAML_FILE="/tmp/pod-batch-$CUR_TIME.yaml"
+              > $TEMP_YAML_FILE
+              
+              echo "生成 $POD_COUNT 个Pod的YAML配置..."
+              
+              # 批量生成Pod YAML配置
+              for i in $(seq 1 $POD_COUNT); do
+                # 轮询选择超级节点
+                NODE_INDEX=$(( (i - 1) % SUPERNODE_COUNT ))
+                SELECTED_NODE=${SUPERNODE_ARRAY[$NODE_INDEX]}
+                
+                POD_NAME="benchmark-pod-$CUR_TIME-$i"
+                
+                cat <<EOF >> $TEMP_YAML_FILE
+            apiVersion: v1
+            kind: Pod
+            metadata:
+              annotations:
+                eks.tke.cloud.tencent.com/cpu: "1"
+                eks.tke.cloud.tencent.com/mem: 2Gi
+                tke.cloud.tencent.com/pod-type: eklet
+                eks.tke.cloud.tencent.com/use-image-cache: "true"
+                benchmark.tke.cloud/create-time: "$(date +%s.%3N)"
+                benchmark.tke.cloud/target-node: "$SELECTED_NODE"
+                benchmark.tke.cloud/batch-id: "$CUR_TIME"
+              labels:
+                test: pod-benchmark
+                app: nginx
+                batch: "$BATCH_TIMESTAMP"
+              name: $POD_NAME
+              namespace: tke-supernode-benchmark
+            spec:
+              nodeName: $SELECTED_NODE
+              containers:
+              - name: nginx
+                image: nginx:alpine
+                imagePullPolicy: IfNotPresent
+                command: ["sleep", "3600"]
+                resources:
+                  requests:
+                    cpu: 100m
+                    memory: 128Mi
+                  limits:
+                    cpu: 200m
+                    memory: 256Mi
+              restartPolicy: Never
+            ---
+              EOF
+              done
+              
+              echo "Pod YAML配置生成完成，开始批量创建..."
+              echo "同时创建 $POD_COUNT 个Pod，分布在 $SUPERNODE_COUNT 个超级节点上..."
+              
+              # 记录批量创建开始时间
+              BATCH_CREATE_START=$(date +%s.%3N)
+              
+              # 批量应用Pod配置
+              if kubectl apply -f "$TEMP_YAML_FILE"; then
+                echo "✓ 所有Pod创建请求已提交成功"
+                BATCH_CREATE_END=$(date +%s.%3N)
+                BATCH_CREATE_TIME=$(calc_time_diff "$BATCH_CREATE_START" "$BATCH_CREATE_END")
+                echo "批量创建耗时: ${BATCH_CREATE_TIME}s"
+              else
+                echo "✗ Pod批量创建失败"
+                exit 1
+              fi
+              
+              # 清理临时文件
+              rm -f $TEMP_YAML_FILE
+              
+              echo "等待Pod状态稳定并收集性能数据..."
+              
+              # 并发监控所有Pod的状态变化
+              for i in $(seq 1 $POD_COUNT); do
+                (
+                  POD_NAME="benchmark-pod-$CUR_TIME-$i"
+                  
+                  # 获取Pod的创建时间戳
+                  POD_CREATE_START=$(kubectl get pod $POD_NAME -n tke-supernode-benchmark -o jsonpath='{.metadata.annotations.benchmark\.tke\.cloud/create-time}' 2>/dev/null || echo "$(date +%s.%3N)")
+                  
+                  # 监控Pod状态变化 - 沙箱初始化完成
+                  TIMEOUT=300  # 5分钟超时
+                  START_MONITOR=$(date +%s)
+                  while true; do
+                    CURRENT_TIME=$(date +%s)
+                    ELAPSED=$((CURRENT_TIME - START_MONITOR))
+                    
+                    if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
+                      echo "Pod $POD_NAME 创建超时 (${TIMEOUT}s)"
+                      echo "TIMEOUT" >> "$POD_STATUS_FILE"
+                      break
+                    fi
+                    
+                    POD_STATUS=$(kubectl get pod $POD_NAME -n tke-supernode-benchmark -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+                    if [ "$POD_STATUS" = "Running" ] || [ "$POD_STATUS" = "Succeeded" ]; then
+                      POD_RUNNING_TIME=$(date +%s.%3N)
+                      CREATION_TIME=$(calc_time_diff "$POD_CREATE_START" "$POD_RUNNING_TIME")
+                      echo "$CREATION_TIME" >> "$CREATION_TIMES_FILE"
+                      echo "Pod $POD_NAME 沙箱初始化完成，耗时: ${CREATION_TIME}s (节点: $(kubectl get pod $POD_NAME -n tke-supernode-benchmark -o jsonpath='{.spec.nodeName}' 2>/dev/null))"
+                      break
+                    elif [ "$POD_STATUS" = "Failed" ]; then
+                      echo "Pod $POD_NAME 创建失败"
+                      echo "FAILED" >> "$POD_STATUS_FILE"
+                      break
+                    fi
+                    sleep 0.1
+                  done
+                  
+                  # 监控Pod Ready状态 - 端到端完成
+                  READY_TIMEOUT=300  # 5分钟超时
+                  START_READY_MONITOR=$(date +%s)
+                  while true; do
+                    CURRENT_TIME=$(date +%s)
+                    READY_ELAPSED=$((CURRENT_TIME - START_READY_MONITOR))
+                    
+                    if [ "$READY_ELAPSED" -ge "$READY_TIMEOUT" ]; then
+                      echo "Pod $POD_NAME Ready状态超时 (${READY_TIMEOUT}s)"
+                      echo "READY_TIMEOUT" >> "$POD_STATUS_FILE"
+                      break
+                    fi
+                    
+                    POD_READY=$(kubectl get pod $POD_NAME -n tke-supernode-benchmark -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "")
+                    if [ "$POD_READY" = "True" ]; then
+                      POD_READY_TIME=$(date +%s.%3N)
+                      E2E_TIME=$(calc_time_diff "$POD_CREATE_START" "$POD_READY_TIME")
+                      echo "$E2E_TIME" >> "$E2E_TIMES_FILE"
+                      echo "Pod $POD_NAME 端到端完成，耗时: ${E2E_TIME}s (节点: $(kubectl get pod $POD_NAME -n tke-supernode-benchmark -o jsonpath='{.spec.nodeName}' 2>/dev/null))"
+                      echo "SUCCESS" >> "$POD_STATUS_FILE"
+                      break
+                    fi
+                    
+                    # 检查Pod是否失败
+                    POD_STATUS=$(kubectl get pod $POD_NAME -n tke-supernode-benchmark -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+                    if [ "$POD_STATUS" = "Failed" ]; then
+                      echo "Pod $POD_NAME Ready检查失败"
+                      echo "FAILED" >> "$POD_STATUS_FILE"
+                      break
+                    fi
+                    sleep 0.1
+                  done
+                ) &
+                
+                # 控制并发监控数量，避免过多后台进程
+                if [ $((i % 20)) -eq 0 ]; then
+                  echo "已启动 $i 个Pod监控进程..."
+                fi
+              done
+              
+              # 等待所有后台进程完成
+              echo "等待所有Pod监控进程完成..."
+              wait
+              echo "所有Pod监控完成，开始统计分析..."
+              sleep 10
+              
+              echo "=== 压测结果统计 ==="
+              
+              # 统计Pod创建情况
+              TOTAL_CREATED=$(kubectl get pods -n tke-supernode-benchmark -l test=pod-benchmark --no-headers 2>/dev/null | wc -l)
+              RUNNING_PODS=$(kubectl get pods -n tke-supernode-benchmark -l test=pod-benchmark --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l)
+              FAILED_PODS=$(kubectl get pods -n tke-supernode-benchmark -l test=pod-benchmark --field-selector=status.phase=Failed --no-headers 2>/dev/null | wc -l)
+              SUCCESS_COUNT=$(grep -c "SUCCESS" "$POD_STATUS_FILE" 2>/dev/null || echo "0")
+              
+              echo "Pod创建统计:"
+              echo "  总创建数: $TOTAL_CREATED"
+              echo "  成功运行: $RUNNING_PODS"
+              echo "  创建失败: $FAILED_PODS"
+              echo "  Ready成功: $SUCCESS_COUNT"
+              
+              if [ $TOTAL_CREATED -gt 0 ]; then
+                SUCCESS_RATE=$(( (SUCCESS_COUNT * 100) / TOTAL_CREATED ))
+                echo "  成功率: ${SUCCESS_RATE}%"
+              else
+                echo "  成功率: 0%"
+              fi
+              
+              # 计算Pod创建P99耗时
+              if [ -s "$CREATION_TIMES_FILE" ]; then
+                CREATION_COUNT=$(wc -l < "$CREATION_TIMES_FILE")
+                echo ""
+                echo "Pod创建耗时统计 (沙箱初始化时间，样本数: $CREATION_COUNT):"
+                
+                CREATION_P99=$(calc_p99 "$CREATION_TIMES_FILE")
+                CREATION_AVG=$(calc_avg "$CREATION_TIMES_FILE")
+                CREATION_MIN=$(sort -n "$CREATION_TIMES_FILE" | head -n1)
+                CREATION_MAX=$(sort -n "$CREATION_TIMES_FILE" | tail -n1)
+                
+                echo "  最小耗时: ${CREATION_MIN}s"
+                echo "  平均耗时: ${CREATION_AVG}s"
+                echo "  P99耗时: ${CREATION_P99}s"
+                echo "  最大耗时: ${CREATION_MAX}s"
+              else
+                echo "Pod创建耗时统计: 无有效数据"
+              fi
+              
+              # 计算端到端P99耗时
+              if [ -s "$E2E_TIMES_FILE" ]; then
+                E2E_COUNT=$(wc -l < "$E2E_TIMES_FILE")
+                echo ""
+                echo "端到端耗时统计 (创建到Ready时间，样本数: $E2E_COUNT):"
+                
+                E2E_P99=$(calc_p99 "$E2E_TIMES_FILE")
+                E2E_AVG=$(calc_avg "$E2E_TIMES_FILE")
+                E2E_MIN=$(sort -n "$E2E_TIMES_FILE" | head -n1)
+                E2E_MAX=$(sort -n "$E2E_TIMES_FILE" | tail -n1)
+                
+                echo "  最小耗时: ${E2E_MIN}s"
+                echo "  平均耗时: ${E2E_AVG}s"
+                echo "  P99耗时: ${E2E_P99}s"
+                echo "  最大耗时: ${E2E_MAX}s"
+              else
+                echo "端到端耗时统计: 无有效数据"
+              fi
+              
+              # 显示Pod分布情况
+              echo ""
+              echo "Pod节点分布:"
+              kubectl get pods -n tke-supernode-benchmark -l test=pod-benchmark -o wide --no-headers 2>/dev/null | awk '{print $7}' | sort | uniq -c | sort -nr
+              
+              # 显示创建时间分布
+              echo ""
+              echo "Pod创建时间分布:"
+              kubectl get pods -n tke-supernode-benchmark -l test=pod-benchmark -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.creationTimestamp}{"\n"}{end}' | head -10
+              
+              echo ""
+              echo "=== 超级节点Pod创建压测完成（并发创建模式）==="
+        templateRef:
+          name: kubectl-cmd
+          template: kubectl-script
+          clusterScope: true
+        when: "'{{inputs.parameters.benchmark-type}}' == 'concurrent-creation'"

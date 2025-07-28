@@ -1,0 +1,306 @@
+# TKE SuperNode 性能阈值配置
+# Performance Thresholds Configuration for TKE SuperNode
+
+# Pod创建性能阈值 | Pod Creation Performance Thresholds
+pod_creation:
+  p99_latency:
+    excellent: 5.0    # 秒 | seconds
+    good: 10.0        # 秒 | seconds
+    warning: 20.0     # 秒 | seconds
+    critical: 30.0    # 秒 | seconds
+  
+  success_rate:
+    excellent: 98.0   # 百分比 | percentage
+    good: 95.0        # 百分比 | percentage
+    warning: 90.0     # 百分比 | percentage
+    critical: 85.0    # 百分比 | percentage
+  
+  average_latency:
+    excellent: 3.0    # 秒 | seconds
+    good: 6.0         # 秒 | seconds
+    warning: 12.0     # 秒 | seconds
+    critical: 20.0    # 秒 | seconds
+
+# 网络性能阈值 | Network Performance Thresholds
+network:
+  latency:
+    excellent: 1.0    # 毫秒 | milliseconds
+    good: 5.0         # 毫秒 | milliseconds
+    warning: 10.0     # 毫秒 | milliseconds
+    critical: 20.0    # 毫秒 | milliseconds
+  
+  bandwidth:
+    excellent: 1000   # Mbps
+    good: 500         # Mbps
+    warning: 200      # Mbps
+    critical: 100     # Mbps
+  
+  packet_loss:
+    excellent: 0.1    # 百分比 | percentage
+    good: 1.0         # 百分比 | percentage
+    warning: 5.0      # 百分比 | percentage
+    critical: 10.0    # 百分比 | percentage
+  
+  jitter:
+    excellent: 1.0    # 毫秒 | milliseconds
+    good: 5.0         # 毫秒 | milliseconds
+    warning: 10.0     # 毫秒 | milliseconds
+    critical: 20.0    # 毫秒 | milliseconds
+
+# 存储性能阈值 | Storage Performance Thresholds
+storage:
+  iops:
+    ssd:
+      excellent: 10000
+      good: 5000
+      warning: 2000
+      critical: 1000
+    premium:
+      excellent: 5000
+      good: 2000
+      warning: 1000
+      critical: 500
+    standard:
+      excellent: 1000
+      good: 500
+      warning: 200
+      critical: 100
+  
+  bandwidth:  # MB/s
+    ssd:
+      excellent: 300
+      good: 150
+      warning: 75
+      critical: 50
+    premium:
+      excellent: 150
+      good: 75
+      warning: 40
+      critical: 25
+    standard:
+      excellent: 50
+      good: 25
+      warning: 15
+      critical: 10
+  
+  latency:  # 毫秒 | milliseconds
+    ssd:
+      excellent: 1.0
+      good: 5.0
+      warning: 10.0
+      critical: 20.0
+    premium:
+      excellent: 5.0
+      good: 10.0
+      warning: 20.0
+      critical: 50.0
+    standard:
+      excellent: 10.0
+      good: 20.0
+      warning: 50.0
+      critical: 100.0
+
+# 镜像拉取性能阈值 | Image Pull Performance Thresholds
+image_pull:
+  pull_time:  # 秒 | seconds
+    small_images:  # < 100MB
+      excellent: 30
+      good: 60
+      warning: 120
+      critical: 300
+    medium_images:  # 100MB - 500MB
+      excellent: 60
+      good: 120
+      warning: 300
+      critical: 600
+    large_images:  # 500MB - 1GB
+      excellent: 120
+      good: 300
+      warning: 600
+      critical: 1200
+    xlarge_images:  # > 1GB
+      excellent: 300
+      good: 600
+      warning: 1200
+      critical: 1800
+  
+  success_rate:
+    excellent: 98.0   # 百分比 | percentage
+    good: 95.0        # 百分比 | percentage
+    warning: 90.0     # 百分比 | percentage
+    critical: 85.0    # 百分比 | percentage
+  
+  concurrent_pulls:
+    max_recommended: 20
+    max_supported: 50
+
+# 资源弹性性能阈值 | Resource Elasticity Performance Thresholds
+elasticity:
+  scaling_time:  # 秒 | seconds
+    cpu_scaling:
+      excellent: 30
+      good: 60
+      warning: 120
+      critical: 300
+    memory_scaling:
+      excellent: 45
+      good: 90
+      warning: 180
+      critical: 360
+    mixed_scaling:
+      excellent: 60
+      good: 120
+      warning: 240
+      critical: 480
+  
+  success_rate:
+    excellent: 95.0   # 百分比 | percentage
+    good: 90.0        # 百分比 | percentage
+    warning: 85.0     # 百分比 | percentage
+    critical: 80.0    # 百分比 | percentage
+  
+  resource_utilization:
+    cpu_threshold: 80.0      # 百分比 | percentage
+    memory_threshold: 85.0   # 百分比 | percentage
+    max_pods_per_node: 100
+
+# 全局性能阈值 | Global Performance Thresholds
+global:
+  # 性能回归检测阈值 | Performance Regression Detection Thresholds
+  regression:
+    tolerance: 10.0           # 百分比，性能下降容忍度 | percentage, performance degradation tolerance
+    consecutive_failures: 3   # 连续失败次数阈值 | consecutive failure threshold
+    baseline_window: 7        # 基线计算窗口（天）| baseline calculation window (days)
+  
+  # 集群资源阈值 | Cluster Resource Thresholds
+  cluster:
+    cpu_utilization: 70.0     # 百分比 | percentage
+    memory_utilization: 75.0  # 百分比 | percentage
+    disk_utilization: 80.0    # 百分比 | percentage
+    node_availability: 95.0   # 百分比 | percentage
+  
+  # 测试执行阈值 | Test Execution Thresholds
+  test_execution:
+    max_duration: 3600        # 秒，单个测试最大执行时间 | seconds, max execution time per test
+    max_concurrent_tests: 5   # 最大并发测试数 | max concurrent tests
+    cleanup_timeout: 300      # 秒，清理超时时间 | seconds, cleanup timeout
+    retry_attempts: 3         # 失败重试次数 | retry attempts on failure
+
+# 告警配置 | Alert Configuration
+alerts:
+  # 告警级别 | Alert Levels
+  levels:
+    info: 0
+    warning: 1
+    critical: 2
+    emergency: 3
+  
+  # 告警规则 | Alert Rules
+  rules:
+    - name: "pod_creation_p99_high"
+      metric: "pod_creation.p99_latency"
+      threshold: 15.0
+      level: "warning"
+      description: "Pod创建P99延迟过高"
+    
+    - name: "pod_creation_success_rate_low"
+      metric: "pod_creation.success_rate"
+      threshold: 90.0
+      level: "critical"
+      operator: "less_than"
+      description: "Pod创建成功率过低"
+    
+    - name: "network_latency_high"
+      metric: "network.latency"
+      threshold: 10.0
+      level: "warning"
+      description: "网络延迟过高"
+    
+    - name: "storage_iops_low"
+      metric: "storage.iops"
+      threshold: 1000
+      level: "warning"
+      operator: "less_than"
+      description: "存储IOPS过低"
+    
+    - name: "image_pull_time_high"
+      metric: "image_pull.pull_time"
+      threshold: 300
+      level: "critical"
+      description: "镜像拉取时间过长"
+    
+    - name: "elasticity_scaling_slow"
+      metric: "elasticity.scaling_time"
+      threshold: 180
+      level: "warning"
+      description: "资源弹性扩容过慢"
+
+# 报告配置 | Reporting Configuration
+reporting:
+  # 报告生成频率 | Report Generation Frequency
+  frequency:
+    daily: true
+    weekly: true
+    monthly: true
+  
+  # 报告内容 | Report Content
+  content:
+    include_trends: true
+    include_comparisons: true
+    include_recommendations: true
+    include_raw_data: false
+  
+  # 报告格式 | Report Format
+  formats:
+    - html
+    - pdf
+    - json
+  
+  # 报告分发 | Report Distribution
+  distribution:
+    email:
+      enabled: true
+      recipients:
+        - "team@company.com"
+        - "ops@company.com"
+    slack:
+      enabled: true
+      channel: "#tke-performance"
+    webhook:
+      enabled: false
+      url: "https://api.company.com/webhooks/performance"
+
+# 环境特定配置 | Environment Specific Configuration
+environments:
+  development:
+    # 开发环境使用较宽松的阈值
+    pod_creation:
+      p99_latency:
+        warning: 30.0
+        critical: 60.0
+    network:
+      latency:
+        warning: 20.0
+        critical: 50.0
+  
+  staging:
+    # 预发布环境使用中等阈值
+    pod_creation:
+      p99_latency:
+        warning: 20.0
+        critical: 40.0
+    network:
+      latency:
+        warning: 15.0
+        critical: 30.0
+  
+  production:
+    # 生产环境使用严格阈值
+    pod_creation:
+      p99_latency:
+        warning: 10.0
+        critical: 20.0
+    network:
+      latency:
+        warning: 5.0
+        critical: 10.0

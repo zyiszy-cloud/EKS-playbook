@@ -1,0 +1,90 @@
+# TKE SuperNode 配置文件
+# TKE SuperNode Configuration File
+
+# 超级节点配置 | SuperNode Configuration
+supernodes:
+  # 自动发现模式 (推荐) | Auto-discovery mode (recommended)
+  auto_discovery: true
+  selector: "node.kubernetes.io/instance-type=eklet"
+  
+  # 手动指定节点列表 (可选) | Manual node list (optional)
+  # 当 auto_discovery 为 false 时使用 | Used when auto_discovery is false
+  manual_nodes:
+    - "eklet-subnet-5kiln11z"
+    - "eklet-subnet-jtkbuw29"
+    - "eklet-subnet-abc123"
+
+# Pod 配置 | Pod Configuration
+pod_config:
+  # 默认资源配置 | Default resource configuration
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+  
+  # 镜像配置 | Image configuration
+  image: "nginx:alpine"
+  image_pull_policy: "IfNotPresent"
+  
+  # TKE 特定注解 | TKE-specific annotations
+  annotations:
+    "eks.tke.cloud.tencent.com/cpu": "1"
+    "eks.tke.cloud.tencent.com/mem": "2Gi"
+    "tke.cloud.tencent.com/pod-type": "eklet"
+    "eks.tke.cloud.tencent.com/use-image-cache": "true"
+    # 如果有特定的镜像缓存ID，可以指定 | Specify image cache ID if available
+    # "eks.tke.cloud.tencent.com/use-image-cache": "imc-q5yjhnfx"
+
+# 测试配置 | Test Configuration
+test_config:
+  # 默认测试参数 | Default test parameters
+  default_pod_count: 20
+  default_batch_size: 10
+  default_namespace: "tke-supernode-benchmark"
+  
+  # 性能测试建议 | Performance test recommendations
+  recommended_configs:
+    small_test:
+      pod_count: 20
+      batch_size: 10
+      description: "小规模功能验证测试"
+    
+    medium_test:
+      pod_count: 100
+      batch_size: 20
+      description: "中等规模性能基线测试"
+    
+    large_test:
+      pod_count: 500
+      batch_size: 50
+      description: "大规模压力测试"
+    
+    extreme_test:
+      pod_count: 1000
+      batch_size: 100
+      description: "极限容量测试"
+
+# 监控配置 | Monitoring Configuration
+monitoring:
+  # 关键指标阈值 | Key metric thresholds
+  thresholds:
+    excellent_p99_creation: 10  # 秒 | seconds
+    excellent_p99_e2e: 15      # 秒 | seconds
+    excellent_success_rate: 95  # 百分比 | percentage
+    
+    good_p99_creation: 20       # 秒 | seconds
+    good_p99_e2e: 30           # 秒 | seconds
+    good_success_rate: 90       # 百分比 | percentage
+  
+  # 监控间隔 | Monitoring intervals
+  check_interval: 0.1  # 秒 | seconds
+  timeout: 300         # 秒 | seconds
+
+# 清理配置 | Cleanup Configuration
+cleanup:
+  auto_cleanup: true
+  cleanup_delay: 30  # 秒，测试完成后等待时间 | seconds, wait time after test completion
+  keep_failed_pods: true  # 保留失败的Pod用于调试 | Keep failed pods for debugging

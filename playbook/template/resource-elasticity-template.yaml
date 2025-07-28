@@ -1,0 +1,573 @@
+---
+# 资源弹性测试模板
+# Resource Elasticity Test Template
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: resource-elasticity-template
+spec:
+  entrypoint: main
+  serviceAccountName: tke-chaos
+  templates:
+  - name: main
+    inputs:
+      parameters:
+      - name: test-type
+        description: "测试类型: cpu-scaling/memory-scaling/mixed-scaling/all"
+        default: "all"
+      - name: initial-pods
+        description: "初始Pod数量"
+        default: "5"
+      - name: max-pods
+        description: "最大Pod数量"
+        default: "50"
+      - name: scaling-step
+        description: "扩容步长"
+        default: "5"
+      - name: scaling-interval
+        description: "扩容间隔(秒)"
+        default: "30"
+      - name: supernode-selector
+        description: "超级节点选择器"
+        default: "node.kubernetes.io/instance-type=eklet"
+      - name: kubeconfig-secret-name
+        description: "目标集群kubeconfig secret名称"
+    steps:
+    - - name: precheck
+        arguments:
+          parameters:
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+          - name: source
+            value: |
+              echo "检查资源弹性测试环境..."
+              
+              # 检查超级节点
+              SUPERNODE_COUNT=$(kubectl get nodes -l "{{inputs.parameters.supernode-selector}}" --no-headers 2>/dev/null | wc -l)
+              if [ "$SUPERNODE_COUNT" -eq 0 ]; then
+                echo "错误: 集群中未找到超级节点"
+                exit 1
+              fi
+              echo "发现 $SUPERNODE_COUNT 个超级节点"
+              
+              # 检查节点资源容量
+              echo "检查节点资源容量..."
+              kubectl describe nodes -l "{{inputs.parameters.supernode-selector}}" | grep -E "Capacity:|Allocatable:" | head -10
+              
+              echo "资源弹性测试环境检查完成"
+        templateRef:
+          name: kubectl-cmd
+          template: kubectl-script
+          clusterScope: true
+    
+    - - name: execute-elasticity-test
+        arguments:
+          parameters:
+          - name: test-type
+            value: "{{inputs.parameters.test-type}}"
+          - name: initial-pods
+            value: "{{inputs.parameters.initial-pods}}"
+          - name: max-pods
+            value: "{{inputs.parameters.max-pods}}"
+          - name: scaling-step
+            value: "{{inputs.parameters.scaling-step}}"
+          - name: scaling-interval
+            value: "{{inputs.parameters.scaling-interval}}"
+          - name: supernode-selector
+            value: "{{inputs.parameters.supernode-selector}}"
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+        template: execute-elasticity-test
+    
+    - - name: cleanup-elasticity-test
+        arguments:
+          parameters:
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+          - name: source
+            value: |
+              echo "清理资源弹性测试资源..."
+              kubectl delete namespace tke-elasticity-test --ignore-not-found=true
+              echo "资源弹性测试资源清理完成"
+        templateRef:
+          name: kubectl-cmd
+          template: kubectl-script
+          clusterScope: true
+
+  - name: execute-elasticity-test
+    inputs:
+      parameters:
+      - name: test-type
+      - name: initial-pods
+      - name: max-pods
+      - name: scaling-step
+      - name: scaling-interval
+      - name: supernode-selector
+      - name: kubeconfig-secret-name
+    dag:
+      tasks:
+      - name: cpu-scaling-test
+        arguments:
+          parameters:
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+          - name: source
+            value: |
+              echo "=== CPU资源弹性测试开始 ==="
+              
+              # 创建测试命名空间
+              kubectl create namespace tke-elasticity-test || true
+              
+              INITIAL_PODS={{inputs.parameters.initial-pods}}
+              MAX_PODS={{inputs.parameters.max-pods}}
+              SCALING_STEP={{inputs.parameters.scaling-step}}
+              SCALING_INTERVAL={{inputs.parameters.scaling-interval}}
+              SELECTOR="{{inputs.parameters.supernode-selector}}"
+              
+              # 解析选择器
+              SELECTOR_KEY=$(echo "$SELECTOR" | cut -d'=' -f1)
+              SELECTOR_VALUE=$(echo "$SELECTOR" | cut -d'=' -f2)
+              
+              # 获取所有可用的超级节点
+              echo "获取可用的超级节点列表..."
+              SUPERNODE_LIST=$(kubectl get nodes -l "$SELECTOR_KEY=$SELECTOR_VALUE" -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n')
+              SUPERNODE_ARRAY=($SUPERNODE_LIST)
+              SUPERNODE_COUNT=${#SUPERNODE_ARRAY[@]}
+              
+              if [ $SUPERNODE_COUNT -eq 0 ]; then
+                echo "错误: 未找到可用的超级节点"
+                exit 1
+              fi
+              
+              echo "发现 $SUPERNODE_COUNT 个超级节点: ${SUPERNODE_ARRAY[*]}"
+              
+              RESULTS_FILE="/tmp/cpu_scaling_results.txt"
+              > $RESULTS_FILE
+              
+              echo "CPU弹性测试配置:"
+              echo "  初始Pod数: $INITIAL_PODS"
+              echo "  最大Pod数: $MAX_PODS"
+              echo "  扩容步长: $SCALING_STEP"
+              echo "  扩容间隔: ${SCALING_INTERVAL}s"
+              echo ""
+              
+              # 创建初始Pod
+              echo "创建初始 $INITIAL_PODS 个CPU测试Pod..."
+              
+              for i in $(seq 1 $INITIAL_PODS); do
+                # 轮询选择超级节点
+                NODE_INDEX=$(( (i - 1) % SUPERNODE_COUNT ))
+                SELECTED_NODE=${SUPERNODE_ARRAY[$NODE_INDEX]}
+                
+                cat <<EOF | kubectl apply -f -
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                name: cpu-test-$i
+                namespace: tke-elasticity-test
+                annotations:
+                  benchmark.tke.cloud/target-node: "$SELECTED_NODE"
+                labels:
+                  test: cpu-elasticity
+                  phase: initial
+              spec:
+                nodeName: $SELECTED_NODE
+                containers:
+                - name: cpu-stress
+                  image: progrium/stress
+                  args: ["--cpu", "1", "--timeout", "3600s"]
+                  resources:
+                    requests:
+                      cpu: "100m"
+                      memory: "128Mi"
+                    limits:
+                      cpu: "500m"
+                      memory: "256Mi"
+              EOF
+              done
+              
+              # 等待初始Pod就绪
+              echo "等待初始Pod就绪..."
+              kubectl wait --for=condition=Ready pod -l test=cpu-elasticity -n tke-elasticity-test --timeout=300s
+              
+              INITIAL_READY=$(kubectl get pods -n tke-elasticity-test -l test=cpu-elasticity --field-selector=status.phase=Running --no-headers | wc -l)
+              echo "初始Pod就绪数: $INITIAL_READY"
+              
+              # 记录初始状态
+              INITIAL_TIME=$(date +%s)
+              echo "$INITIAL_TIME,$INITIAL_READY,initial,success" >> $RESULTS_FILE
+              
+              # 逐步扩容测试
+              CURRENT_PODS=$INITIAL_PODS
+              SCALING_ROUND=1
+              
+              while [ $CURRENT_PODS -lt $MAX_PODS ]; do
+                NEXT_PODS=$((CURRENT_PODS + SCALING_STEP))
+                [ $NEXT_PODS -gt $MAX_PODS ] && NEXT_PODS=$MAX_PODS
+                
+                echo "第 $SCALING_ROUND 轮扩容: $CURRENT_PODS -> $NEXT_PODS"
+                SCALING_START_TIME=$(date +%s)
+                
+                # 创建新的Pod
+                for i in $(seq $((CURRENT_PODS + 1)) $NEXT_PODS); do
+                  # 轮询选择超级节点
+                  NODE_INDEX=$(( (i - 1) % SUPERNODE_COUNT ))
+                  SELECTED_NODE=${SUPERNODE_ARRAY[$NODE_INDEX]}
+                  
+                  cat <<EOF | kubectl apply -f -
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                name: cpu-test-$i
+                namespace: tke-elasticity-test
+                annotations:
+                  benchmark.tke.cloud/target-node: "$SELECTED_NODE"
+                labels:
+                  test: cpu-elasticity
+                  phase: scaling-$SCALING_ROUND
+              spec:
+                nodeName: $SELECTED_NODE
+                containers:
+                - name: cpu-stress
+                  image: progrium/stress
+                  args: ["--cpu", "1", "--timeout", "3600s"]
+                  resources:
+                    requests:
+                      cpu: "100m"
+                      memory: "128Mi"
+                    limits:
+                      cpu: "500m"
+                      memory: "256Mi"
+              EOF
+                done
+                
+                # 监控扩容过程
+                TIMEOUT=300  # 5分钟超时
+                START_MONITOR=$(date +%s)
+                
+                while true; do
+                  CURRENT_TIME=$(date +%s)
+                  ELAPSED=$((CURRENT_TIME - START_MONITOR))
+                  
+                  if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
+                    echo "  扩容超时"
+                    SCALING_END_TIME=$(date +%s)
+                    SCALING_DURATION=$((SCALING_END_TIME - SCALING_START_TIME))
+                    READY_PODS=$(kubectl get pods -n tke-elasticity-test -l test=cpu-elasticity --field-selector=status.phase=Running --no-headers | wc -l)
+                    echo "$SCALING_END_TIME,$READY_PODS,scaling-$SCALING_ROUND,timeout" >> $RESULTS_FILE
+                    break
+                  fi
+                  
+                  READY_PODS=$(kubectl get pods -n tke-elasticity-test -l test=cpu-elasticity --field-selector=status.phase=Running --no-headers | wc -l)
+                  PENDING_PODS=$(kubectl get pods -n tke-elasticity-test -l test=cpu-elasticity --field-selector=status.phase=Pending --no-headers | wc -l)
+                  
+                  echo "  当前状态: 运行=$READY_PODS, 等待=$PENDING_PODS"
+                  
+                  if [ $READY_PODS -eq $NEXT_PODS ]; then
+                    SCALING_END_TIME=$(date +%s)
+                    SCALING_DURATION=$((SCALING_END_TIME - SCALING_START_TIME))
+                    echo "  扩容完成，耗时: ${SCALING_DURATION}s"
+                    echo "$SCALING_END_TIME,$READY_PODS,scaling-$SCALING_ROUND,success" >> $RESULTS_FILE
+                    break
+                  fi
+                  
+                  sleep 5
+                done
+                
+                CURRENT_PODS=$NEXT_PODS
+                SCALING_ROUND=$((SCALING_ROUND + 1))
+                
+                # 等待间隔
+                if [ $CURRENT_PODS -lt $MAX_PODS ]; then
+                  echo "  等待 ${SCALING_INTERVAL}s 后进行下一轮扩容..."
+                  sleep $SCALING_INTERVAL
+                fi
+              done
+              
+              # 分析CPU弹性测试结果
+              if [ -s "$RESULTS_FILE" ]; then
+                echo ""
+                echo "=== CPU弹性测试结果分析 ==="
+                
+                TOTAL_ROUNDS=$(grep -c "scaling-" $RESULTS_FILE)
+                SUCCESS_ROUNDS=$(grep -c "success" $RESULTS_FILE)
+                TIMEOUT_ROUNDS=$(grep -c "timeout" $RESULTS_FILE)
+                
+                echo "扩容轮次统计:"
+                echo "  总轮次: $TOTAL_ROUNDS"
+                echo "  成功轮次: $SUCCESS_ROUNDS"
+                echo "  超时轮次: $TIMEOUT_ROUNDS"
+                
+                if [ $TOTAL_ROUNDS -gt 0 ]; then
+                  SUCCESS_RATE=$(( (SUCCESS_ROUNDS * 100) / TOTAL_ROUNDS ))
+                  echo "  成功率: ${SUCCESS_RATE}%"
+                fi
+                
+                # 计算平均扩容时间
+                TOTAL_DURATION=0
+                SUCCESS_COUNT=0
+                
+                while IFS=',' read -r end_time pods phase status; do
+                  if [ "$status" = "success" ] && [[ "$phase" == scaling-* ]]; then
+                    # 找到对应的开始时间 (简化处理，使用固定间隔)
+                    DURATION=$SCALING_INTERVAL
+                    TOTAL_DURATION=$((TOTAL_DURATION + DURATION))
+                    SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+                  fi
+                done < $RESULTS_FILE
+                
+                if [ $SUCCESS_COUNT -gt 0 ]; then
+                  AVG_DURATION=$((TOTAL_DURATION / SUCCESS_COUNT))
+                  echo "  平均扩容时间: ${AVG_DURATION}s"
+                  
+                  # 性能评估
+                  if [ $AVG_DURATION -le 30 ]; then
+                    echo "  弹性性能: 优秀"
+                  elif [ $AVG_DURATION -le 60 ]; then
+                    echo "  弹性性能: 良好"
+                  elif [ $AVG_DURATION -le 120 ]; then
+                    echo "  弹性性能: 一般"
+                  else
+                    echo "  弹性性能: 需要优化"
+                  fi
+                fi
+                
+                # 显示最终状态
+                FINAL_PODS=$(kubectl get pods -n tke-elasticity-test -l test=cpu-elasticity --field-selector=status.phase=Running --no-headers | wc -l)
+                echo ""
+                echo "最终状态:"
+                echo "  目标Pod数: $MAX_PODS"
+                echo "  实际运行Pod数: $FINAL_PODS"
+                echo "  达成率: $(( (FINAL_PODS * 100) / MAX_PODS ))%"
+                
+              else
+                echo "CPU弹性测试无结果"
+              fi
+              
+              echo "=== CPU资源弹性测试完成 ==="
+        templateRef:
+          name: kubectl-cmd
+          template: kubectl-script
+          clusterScope: true
+        when: "'{{inputs.parameters.test-type}}' == 'cpu-scaling' || '{{inputs.parameters.test-type}}' == 'all'"
+      
+      - name: memory-scaling-test
+        arguments:
+          parameters:
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+          - name: source
+            value: |
+              echo "=== 内存资源弹性测试开始 ==="
+              
+              INITIAL_PODS={{inputs.parameters.initial-pods}}
+              MAX_PODS={{inputs.parameters.max-pods}}
+              SCALING_STEP={{inputs.parameters.scaling-step}}
+              SCALING_INTERVAL={{inputs.parameters.scaling-interval}}
+              SELECTOR="{{inputs.parameters.supernode-selector}}"
+              
+              RESULTS_FILE="/tmp/memory_scaling_results.txt"
+              > $RESULTS_FILE
+              
+              echo "内存弹性测试配置:"
+              echo "  初始Pod数: $INITIAL_PODS"
+              echo "  最大Pod数: $MAX_PODS"
+              echo "  扩容步长: $SCALING_STEP"
+              echo "  扩容间隔: ${SCALING_INTERVAL}s"
+              echo ""
+              
+              # 创建初始内存测试Pod
+              echo "创建初始 $INITIAL_PODS 个内存测试Pod..."
+              
+              for i in $(seq 1 $INITIAL_PODS); do
+                # 轮询选择超级节点
+                NODE_INDEX=$(( (i - 1) % SUPERNODE_COUNT ))
+                SELECTED_NODE=${SUPERNODE_ARRAY[$NODE_INDEX]}
+                
+                cat <<EOF | kubectl apply -f -
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                name: memory-test-$i
+                namespace: tke-elasticity-test
+                annotations:
+                  benchmark.tke.cloud/target-node: "$SELECTED_NODE"
+                labels:
+                  test: memory-elasticity
+                  phase: initial
+              spec:
+                nodeName: $SELECTED_NODE
+                containers:
+                - name: memory-stress
+                  image: progrium/stress
+                  args: ["--vm", "1", "--vm-bytes", "256M", "--timeout", "3600s"]
+                  resources:
+                    requests:
+                      cpu: "100m"
+                      memory: "256Mi"
+                    limits:
+                      cpu: "200m"
+                      memory: "512Mi"
+              EOF
+              done
+              
+              # 等待初始Pod就绪
+              echo "等待初始Pod就绪..."
+              kubectl wait --for=condition=Ready pod -l test=memory-elasticity -n tke-elasticity-test --timeout=300s
+              
+              INITIAL_READY=$(kubectl get pods -n tke-elasticity-test -l test=memory-elasticity --field-selector=status.phase=Running --no-headers | wc -l)
+              echo "初始Pod就绪数: $INITIAL_READY"
+              
+              # 记录初始状态
+              INITIAL_TIME=$(date +%s)
+              echo "$INITIAL_TIME,$INITIAL_READY,initial,success" >> $RESULTS_FILE
+              
+              # 逐步扩容测试
+              CURRENT_PODS=$INITIAL_PODS
+              SCALING_ROUND=1
+              
+              while [ $CURRENT_PODS -lt $MAX_PODS ]; do
+                NEXT_PODS=$((CURRENT_PODS + SCALING_STEP))
+                [ $NEXT_PODS -gt $MAX_PODS ] && NEXT_PODS=$MAX_PODS
+                
+                echo "第 $SCALING_ROUND 轮内存扩容: $CURRENT_PODS -> $NEXT_PODS"
+                SCALING_START_TIME=$(date +%s)
+                
+                # 创建新的内存测试Pod
+                for i in $(seq $((CURRENT_PODS + 1)) $NEXT_PODS); do
+                  # 轮询选择超级节点
+                  NODE_INDEX=$(( (i - 1) % SUPERNODE_COUNT ))
+                  SELECTED_NODE=${SUPERNODE_ARRAY[$NODE_INDEX]}
+                  
+                  cat <<EOF | kubectl apply -f -
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                name: memory-test-$i
+                namespace: tke-elasticity-test
+                annotations:
+                  benchmark.tke.cloud/target-node: "$SELECTED_NODE"
+                labels:
+                  test: memory-elasticity
+                  phase: scaling-$SCALING_ROUND
+              spec:
+                nodeName: $SELECTED_NODE
+                containers:
+                - name: memory-stress
+                  image: progrium/stress
+                  args: ["--vm", "1", "--vm-bytes", "256M", "--timeout", "3600s"]
+                  resources:
+                    requests:
+                      cpu: "100m"
+                      memory: "256Mi"
+                    limits:
+                      cpu: "200m"
+                      memory: "512Mi"
+              EOF
+                done
+                
+                # 监控扩容过程
+                TIMEOUT=300  # 5分钟超时
+                START_MONITOR=$(date +%s)
+                
+                while true; do
+                  CURRENT_TIME=$(date +%s)
+                  ELAPSED=$((CURRENT_TIME - START_MONITOR))
+                  
+                  if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
+                    echo "  内存扩容超时"
+                    SCALING_END_TIME=$(date +%s)
+                    READY_PODS=$(kubectl get pods -n tke-elasticity-test -l test=memory-elasticity --field-selector=status.phase=Running --no-headers | wc -l)
+                    echo "$SCALING_END_TIME,$READY_PODS,scaling-$SCALING_ROUND,timeout" >> $RESULTS_FILE
+                    break
+                  fi
+                  
+                  READY_PODS=$(kubectl get pods -n tke-elasticity-test -l test=memory-elasticity --field-selector=status.phase=Running --no-headers | wc -l)
+                  PENDING_PODS=$(kubectl get pods -n tke-elasticity-test -l test=memory-elasticity --field-selector=status.phase=Pending --no-headers | wc -l)
+                  FAILED_PODS=$(kubectl get pods -n tke-elasticity-test -l test=memory-elasticity --field-selector=status.phase=Failed --no-headers | wc -l)
+                  
+                  echo "  当前状态: 运行=$READY_PODS, 等待=$PENDING_PODS, 失败=$FAILED_PODS"
+                  
+                  # 检查是否有内存不足的Pod
+                  if [ $FAILED_PODS -gt 0 ]; then
+                    echo "  检测到Pod失败，可能是内存资源不足"
+                    kubectl get pods -n tke-elasticity-test -l test=memory-elasticity --field-selector=status.phase=Failed -o wide
+                  fi
+                  
+                  if [ $READY_PODS -eq $NEXT_PODS ]; then
+                    SCALING_END_TIME=$(date +%s)
+                    SCALING_DURATION=$((SCALING_END_TIME - SCALING_START_TIME))
+                    echo "  内存扩容完成，耗时: ${SCALING_DURATION}s"
+                    echo "$SCALING_END_TIME,$READY_PODS,scaling-$SCALING_ROUND,success" >> $RESULTS_FILE
+                    break
+                  fi
+                  
+                  sleep 5
+                done
+                
+                CURRENT_PODS=$NEXT_PODS
+                SCALING_ROUND=$((SCALING_ROUND + 1))
+                
+                # 等待间隔
+                if [ $CURRENT_PODS -lt $MAX_PODS ]; then
+                  echo "  等待 ${SCALING_INTERVAL}s 后进行下一轮扩容..."
+                  sleep $SCALING_INTERVAL
+                fi
+              done
+              
+              # 分析内存弹性测试结果
+              if [ -s "$RESULTS_FILE" ]; then
+                echo ""
+                echo "=== 内存弹性测试结果分析 ==="
+                
+                TOTAL_ROUNDS=$(grep -c "scaling-" $RESULTS_FILE)
+                SUCCESS_ROUNDS=$(grep -c "success" $RESULTS_FILE)
+                TIMEOUT_ROUNDS=$(grep -c "timeout" $RESULTS_FILE)
+                
+                echo "内存扩容轮次统计:"
+                echo "  总轮次: $TOTAL_ROUNDS"
+                echo "  成功轮次: $SUCCESS_ROUNDS"
+                echo "  超时轮次: $TIMEOUT_ROUNDS"
+                
+                if [ $TOTAL_ROUNDS -gt 0 ]; then
+                  SUCCESS_RATE=$(( (SUCCESS_ROUNDS * 100) / TOTAL_ROUNDS ))
+                  echo "  成功率: ${SUCCESS_RATE}%"
+                  
+                  # 内存弹性评估
+                  if [ $SUCCESS_RATE -ge 90 ]; then
+                    echo "  内存弹性: 优秀"
+                  elif [ $SUCCESS_RATE -ge 75 ]; then
+                    echo "  内存弹性: 良好"
+                  elif [ $SUCCESS_RATE -ge 50 ]; then
+                    echo "  内存弹性: 一般"
+                  else
+                    echo "  内存弹性: 需要优化"
+                  fi
+                fi
+                
+                # 显示最终状态
+                FINAL_PODS=$(kubectl get pods -n tke-elasticity-test -l test=memory-elasticity --field-selector=status.phase=Running --no-headers | wc -l)
+                FAILED_PODS=$(kubectl get pods -n tke-elasticity-test -l test=memory-elasticity --field-selector=status.phase=Failed --no-headers | wc -l)
+                
+                echo ""
+                echo "最终状态:"
+                echo "  目标Pod数: $MAX_PODS"
+                echo "  实际运行Pod数: $FINAL_PODS"
+                echo "  失败Pod数: $FAILED_PODS"
+                echo "  达成率: $(( (FINAL_PODS * 100) / MAX_PODS ))%"
+                
+                # 检查节点内存使用情况
+                echo ""
+                echo "节点内存使用情况:"
+                kubectl describe nodes -l "{{inputs.parameters.supernode-selector}}" | grep -A 5 "Allocated resources:" | grep -E "memory|Memory"
+                
+              else
+                echo "内存弹性测试无结果"
+              fi
+              
+              echo "=== 内存资源弹性测试完成 ==="
+        templateRef:
+          name: kubectl-cmd
+          template: kubectl-script
+          clusterScope: true
+        when: "'{{inputs.parameters.test-type}}' == 'memory-scaling' || '{{inputs.parameters.test-type}}' == 'all'"

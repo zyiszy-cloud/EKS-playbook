@@ -1,0 +1,53 @@
+---
+# 资源弹性测试工作流
+# Resource Elasticity Test Workflow
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  labels:
+    resource-elasticity-test: "true"
+  name: resource-elasticity-test
+  namespace: tke-chaos-test
+spec:
+  entrypoint: main
+  serviceAccountName: tke-chaos
+  arguments:
+    parameters:
+    - name: test-type  # 测试类型: cpu-scaling/memory-scaling/mixed-scaling/all
+      value: "all"
+    - name: initial-pods  # 初始Pod数量
+      value: "5"
+    - name: max-pods  # 最大Pod数量
+      value: "50"
+    - name: scaling-step  # 扩容步长
+      value: "5"
+    - name: scaling-interval  # 扩容间隔(秒)
+      value: "30"
+    - name: supernode-selector  # 超级节点选择器
+      value: "node.kubernetes.io/instance-type=eklet"
+    - name: kubeconfig-secret-name  # 目标集群kubeconfig secret名称
+      value: "dest-cluster-kubeconfig"
+  templates:
+  - name: main
+    steps:
+    - - name: resource-elasticity-test
+        arguments:
+          parameters:
+          - name: test-type
+            value: "{{workflow.parameters.test-type}}"
+          - name: initial-pods
+            value: "{{workflow.parameters.initial-pods}}"
+          - name: max-pods
+            value: "{{workflow.parameters.max-pods}}"
+          - name: scaling-step
+            value: "{{workflow.parameters.scaling-step}}"
+          - name: scaling-interval
+            value: "{{workflow.parameters.scaling-interval}}"
+          - name: supernode-selector
+            value: "{{workflow.parameters.supernode-selector}}"
+          - name: kubeconfig-secret-name
+            value: "{{workflow.parameters.kubeconfig-secret-name}}"
+        templateRef:
+          name: resource-elasticity-template
+          template: main
+          clusterScope: true

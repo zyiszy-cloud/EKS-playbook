@@ -1,45 +1,45 @@
 ---
-# 腾讯云超级节点演练场景
-# 基于workload-disruption成功模式构建
+# 腾讯云超级节点Pod创建压测场景
+# 完全基于supernode-scenario成功模式构建
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
   labels:
-    supernode-scenario: "true"
-  name: supernode-scenario
+    supernode-benchmark: "true"
+  name: supernode-pod-benchmark
   namespace: tke-chaos-test
 spec:
   entrypoint: main
   serviceAccountName: tke-chaos
   arguments:
     parameters:
-    - name: scenario-type  # 演练场景类型: schedule-pressure/resource-limit
-      value: "schedule-pressure"
+    - name: benchmark-type  # 压测类型: concurrent-creation/sequential-creation
+      value: "concurrent-creation"
     - name: supernode-selector  # 超级节点选择器
       value: "node.kubernetes.io/instance-type=eklet"
     - name: test-duration  # 测试持续时间
       value: "60s"
-    - name: test-pod-count  # 测试Pod数量
-      value: "10"
+    - name: target-pod-count  # 目标Pod数量
+      value: "20"
     - name: kubeconfig-secret-name  # 目标集群kubeconfig secret名称
       value: "dest-cluster-kubeconfig"
   templates:
   - name: main
     steps:
-    - - name: supernode-test
+    - - name: supernode-pod-benchmark
         arguments:
           parameters:
-          - name: scenario-type
-            value: "{{workflow.parameters.scenario-type}}"
+          - name: benchmark-type
+            value: "{{workflow.parameters.benchmark-type}}"
           - name: supernode-selector
             value: "{{workflow.parameters.supernode-selector}}"
           - name: test-duration
             value: "{{workflow.parameters.test-duration}}"
-          - name: test-pod-count
-            value: "{{workflow.parameters.test-pod-count}}"
+          - name: target-pod-count
+            value: "{{workflow.parameters.target-pod-count}}"
           - name: kubeconfig-secret-name
             value: "{{workflow.parameters.kubeconfig-secret-name}}"
         templateRef:
-          name: supernode-template
+          name: supernode-pod-benchmark-template
           template: main
           clusterScope: true
