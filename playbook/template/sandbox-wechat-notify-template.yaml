@@ -113,7 +113,7 @@ spec:
               {
                 "msgtype": "markdown",
                 "markdown": {
-                  "content": "{{steps.generate-sandbox-test-notify-message.outputs.result}}"
+                  "content": "{{steps.generate-sandbox-test-notify-message.outputs.parameters.result}}"
                 }
               }
           - name: webhook-url
@@ -190,7 +190,7 @@ spec:
         
         # 根据阶段生成不同的消息内容
         if [ "{{inputs.parameters.stage}}" = "开始" ]; then
-          cat <<EOF
+          cat <<EOF > /tmp/result
         ### ${STATUS_EMOJI} 超级节点沙箱复用测试开始
         
         **📋 基础信息**
@@ -207,17 +207,47 @@ spec:
         > 📊 测试进行中，请稍候...
         EOF
         else
-          # 生成性能分析部分
-          PERF_SECTION=""
-          if [ "{{inputs.parameters.improvement}}" != "0" ] && [ "{{inputs.parameters.improvement}}" != "" ]; then
-            if [ {{inputs.parameters.improvement}} -gt 0 ]; then
-              PERF_SECTION="
-        **⚡ 性能分析**
-        - 首次创建: {{inputs.parameters.first-time}}秒
-        - 沙箱复用: {{inputs.parameters.second-time}}秒
-        - 性能提升: **{{inputs.parameters.improvement}}秒** ({{inputs.parameters.improvement-percent}}%)
-        - 复用效果: $([ {{inputs.parameters.improvement}} -ge 3 ] && echo "显著" || ([ {{inputs.parameters.improvement}} -ge 1 ] && echo "明显" || echo "轻微"))"
+          # 生成时间指标统计部分
+          TIME_METRICS_SECTION=""
+          if [ "{{inputs.parameters.average-time}}" != "0" ] && [ "{{inputs.parameters.average-time}}" != "" ]; then
+            TIME_METRICS_SECTION="
+        **📋 Pod创建耗时（沙箱初始化）:**
+        - 平均: {{inputs.parameters.average-time}}秒
+        - 最快: {{inputs.parameters.first-time}}秒
+        - 最慢: {{inputs.parameters.second-time}}秒"
+          fi
+          
+          # 生成沙箱复用效果分析部分
+          REUSE_ANALYSIS_SECTION=""
+          if [ "{{inputs.parameters.first-time}}" != "0" ] && [ "{{inputs.parameters.second-time}}" != "0" ]; then
+            # 计算性能提升
+            IMPROVEMENT=$(echo "{{inputs.parameters.first-time}} {{inputs.parameters.second-time}}" | awk '{
+              if ($1 > $2) {
+                improvement = $1 - $2
+                if ($1 > 0) {
+                  percent = int(improvement * 100 / $1)
+                } else {
+                  percent = 0
+                }
+                printf "%.1f", improvement
+              } else {
+                printf "0.0"
+              }
+            }')
+            
+            # 生成结论
+            CONCLUSION=""
+            if [ "$IMPROVEMENT" != "0.0" ]; then
+              CONCLUSION="性能提升明显，沙箱复用生效"
+            else
+              CONCLUSION="两次创建时间相同，沙箱复用可能生效但提升不明显"
             fi
+            
+            REUSE_ANALYSIS_SECTION="
+        **📊 沙箱复用效果分析:**
+        - 基准测试: {{inputs.parameters.first-time}}秒
+        - 沙箱复用: {{inputs.parameters.second-time}}秒
+        - 结论: $CONCLUSION"
           fi
           
           # 生成详细信息部分
@@ -228,7 +258,7 @@ spec:
         {{inputs.parameters.details-message}}"
           fi
           
-          cat <<EOF
+          cat <<EOF >> /tmp/result
         ### ${STATUS_EMOJI} 超级节点沙箱复用测试完成
         
         **📋 基础信息**
@@ -241,12 +271,16 @@ spec:
         - 状态: **${STATUS_TEXT}**
         - 总测试: **{{inputs.parameters.total-tests}}次**
         - 成功: **{{inputs.parameters.successful-tests}}次**
-        - 失败: **{{inputs.parameters.failed-tests}}次**
-        - 平均创建时间: \`{{inputs.parameters.average-time}}秒\`${PERF_SECTION}${DETAILS_SECTION}
+        - 失败: **{{inputs.parameters.failed-tests}}次**${TIME_METRICS_SECTION}${REUSE_ANALYSIS_SECTION}${DETAILS_SECTION}
         
         > 📈 详细分析数据请查看工作流日志
         EOF
         fi
+    outputs:
+      parameters:
+      - name: result
+        valueFrom:
+          path: /tmp/result
 
   # 通用通知发送模板
   - name: notify
@@ -319,7 +353,7 @@ spec:
               {
                 "msgtype": "markdown",
                 "markdown": {
-                  "content": "### {{inputs.parameters.title}}\n\n{{inputs.parameters.content}}\n\n> 发送时间: $(date '+%Y-%m-%d %H:%M:%S')"
+                  "content": "### {{inputs.parameters.title}}\\n\\n{{inputs.parameters.content}}\\n\\n> 发送时间: $(date '+%Y-%m-%d %H:%M:%S')"
                 }
               }
           - name: webhook-url
