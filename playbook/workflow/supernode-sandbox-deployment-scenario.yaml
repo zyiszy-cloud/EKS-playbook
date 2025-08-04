@@ -1,0 +1,50 @@
+---
+# 超级节点Deployment沙箱复用测试工作流
+# 使用Deployment而非裸Pod进行沙箱复用测试
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: sandbox-deployment-test-
+  namespace: tke-chaos-test
+  labels:
+    test-type: "deployment-sandbox-reuse"
+spec:
+  serviceAccountName: tke-chaos
+  entrypoint: deployment-sandbox-test
+  arguments:
+    parameters:
+    # 基础配置
+    - name: cluster-id
+      value: "tke-cluster"
+    - name: webhook-url
+      value: ""
+    
+    # 测试配置
+    - name: kubeconfig-secret-name
+      value: ""
+    - name: deployment-name-prefix
+      value: "sandbox-deployment-test"
+    - name: replicas
+      value: "1"  # Deployment副本数
+    - name: pod-image
+      value: "nginx:alpine"
+    - name: namespace
+      value: "tke-chaos-test"
+    - name: test-iterations
+      value: "1"
+    - name: delay-between-tests
+      value: "20s"
+    
+    # 资源配置
+    - name: cpu-request
+      value: "100m"
+    - name: memory-request
+      value: "128Mi"
+    - name: cpu-limit
+      value: "200m"
+    - name: memory-limit
+      value: "256Mi"
+
+  workflowTemplateRef:
+    name: supernode-sandbox-deployment-template
+    clusterScope: true

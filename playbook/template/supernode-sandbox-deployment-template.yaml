@@ -1,0 +1,1001 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: supernode-sandbox-deployment-template
+  annotations:
+    description: "超级节点Deployment沙箱复用测试模板 - 修复版本"
+    version: "4.1"
+spec:
+  serviceAccountName: tke-chaos
+  entrypoint: deployment-sandbox-test
+  
+  arguments:
+    parameters:
+    # 基础配置
+    - name: cluster-id
+      value: "tke-cluster"
+    - name: webhook-url
+      value: ""
+    - name: kubeconfig-secret-name
+      value: ""
+    - name: namespace
+      value: "tke-chaos-test"
+    
+    # 测试配置
+    - name: deployment-name-prefix
+      value: "sandbox-reuse-test"
+    - name: replicas
+      value: "1"
+    - name: pod-image
+      value: "nginx:alpine"
+    - name: test-iterations
+      value: "1"
+    - name: delay-between-tests
+      value: "20s"
+    
+    # 资源配置
+    - name: cpu-request
+      value: "100m"
+    - name: memory-request
+      value: "128Mi"
+    - name: cpu-limit
+      value: "200m"
+    - name: memory-limit
+      value: "256Mi"
+
+  templates:
+  # 主测试流程
+  - name: deployment-sandbox-test
+    inputs:
+      parameters:
+      - name: cluster-id
+      - name: kubeconfig-secret-name
+      - name: namespace
+      - name: deployment-name-prefix
+      - name: replicas
+      - name: pod-image
+      - name: test-iterations
+      - name: delay-between-tests
+      - name: cpu-request
+      - name: memory-request
+      - name: cpu-limit
+      - name: memory-limit
+    steps:
+    # 第一步：验证超级节点
+    - - name: verify-supernodes
+        template: verify-supernodes
+        arguments:
+          parameters:
+          - name: cluster-id
+            value: "{{inputs.parameters.cluster-id}}"
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+          - name: namespace
+            value: "{{inputs.parameters.namespace}}"
+    
+    # 第二步：运行部署测试
+    - - name: run-deployment-test
+        template: run-deployment-test
+        arguments:
+          parameters:
+          - name: cluster-id
+            value: "{{inputs.parameters.cluster-id}}"
+          - name: webhook-url
+            value: "{{inputs.parameters.webhook-url}}"
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+          - name: namespace
+            value: "{{inputs.parameters.namespace}}"
+          - name: deployment-name-prefix
+            value: "{{inputs.parameters.deployment-name-prefix}}"
+          - name: replicas
+            value: "{{inputs.parameters.replicas}}"
+          - name: pod-image
+            value: "{{inputs.parameters.pod-image}}"
+          - name: test-iterations
+            value: "{{inputs.parameters.test-iterations}}"
+          - name: delay-between-tests
+            value: "{{inputs.parameters.delay-between-tests}}"
+          - name: cpu-request
+            value: "{{inputs.parameters.cpu-request}}"
+          - name: memory-request
+            value: "{{inputs.parameters.memory-request}}"
+          - name: cpu-limit
+            value: "{{inputs.parameters.cpu-limit}}"
+          - name: memory-limit
+            value: "{{inputs.parameters.memory-limit}}"
+
+  # 验证超级节点模板
+  - name: verify-supernodes
+    inputs:
+      parameters:
+      - name: cluster-id
+      - name: kubeconfig-secret-name
+      - name: namespace
+    script:
+      image: bitnami/kubectl:1.32.4
+      command: [bash]
+      source: |
+        echo "🔍 验证超级节点状态..."
+        
+        # 获取超级节点信息
+        SUPERNODES=$(kubectl get nodes -l node.kubernetes.io/instance-type=eklet --no-headers 2>/dev/null | awk '{print $1}' | head -10)
+        
+        if [ -z "$SUPERNODES" ]; then
+          echo "❌ 未发现超级节点"
+          exit 1
+        fi
+        
+        echo "✅ 发现超级节点:"
+        for node in $SUPERNODES; do
+          echo "- $node"
+          # 检查节点状态
+          STATUS=$(kubectl get node $node --no-headers 2>/dev/null | awk '{print $2}')
+          if [ "$STATUS" = "Ready" ]; then
+            echo "✅ $node 状态正常"
+          else
+            echo "⚠️ $node 状态异常: $STATUS"
+          fi
+        done
+        
+        echo "success" > /tmp/result
+    outputs:
+      parameters:
+      - name: result
+        valueFrom:
+          path: /tmp/result
+
+  # 运行部署测试模板
+  - name: run-deployment-test
+    inputs:
+      parameters:
+      - name: cluster-id
+      - name: webhook-url
+      - name: kubeconfig-secret-name
+      - name: namespace
+      - name: deployment-name-prefix
+      - name: replicas
+      - name: pod-image
+      - name: test-iterations
+      - name: delay-between-tests
+      - name: cpu-request
+      - name: memory-request
+      - name: cpu-limit
+      - name: memory-limit
+    script:
+      image: alpine/k8s:1.28.4
+      command: [bash]
+      source: |
+        echo "📊 使用内置shell计算，毫秒级精度"
+        
+        # 确保必要的工具可用
+        if ! command -v curl >/dev/null 2>&1; then
+          echo "🔧 安装curl..."
+          apk add --no-cache curl 2>/dev/null || echo "⚠️ 无法安装curl，将使用wget"
+        fi
+        
+        if ! command -v bc >/dev/null 2>&1; then
+          echo "🔧 安装bc..."
+          apk add --no-cache bc 2>/dev/null || echo "⚠️ 无法安装bc，将使用awk进行计算"
+        fi
+        
+        # 测试参数初始化
+        CLUSTER_ID="{{inputs.parameters.cluster-id}}"
+        WEBHOOK_URL="{{inputs.parameters.webhook-url}}"
+        NAMESPACE="{{inputs.parameters.namespace}}"
+        DEPLOYMENT_NAME_PREFIX="{{inputs.parameters.deployment-name-prefix}}"
+        REPLICAS={{inputs.parameters.replicas}}
+        POD_IMAGE="{{inputs.parameters.pod-image}}"
+        CPU_REQUEST="{{inputs.parameters.cpu-request}}"
+        MEMORY_REQUEST="{{inputs.parameters.memory-request}}"
+        CPU_LIMIT="{{inputs.parameters.cpu-limit}}"
+        MEMORY_LIMIT="{{inputs.parameters.memory-limit}}"
+        ITERATIONS={{inputs.parameters.test-iterations}}
+        DELAY="{{inputs.parameters.delay-between-tests}}"
+        TIMEOUT="300s"
+        
+        # 调试信息：显示接收到的参数
+        echo "🔍 接收到的测试参数:"
+        echo "  集群ID: $CLUSTER_ID"
+        echo "  Webhook URL: '$WEBHOOK_URL'"
+        echo "  命名空间: $NAMESPACE"
+        echo "  Pod副本数: $REPLICAS"
+        echo "  Pod镜像: $POD_IMAGE"
+        echo "  测试迭代: $ITERATIONS"
+        echo "  销毁间隔: $DELAY"
+        echo ""
+        
+        # 验证关键参数
+        if [ "$REPLICAS" -eq 0 ] 2>/dev/null; then
+          echo "❌ 错误：Pod副本数为0，使用默认值1"
+          REPLICAS=1
+        fi
+        
+        echo "📊 最终使用的Pod副本数: $REPLICAS"
+        
+        # 初始化统计变量
+        TOTAL_TESTS=0
+        SUCCESSFUL_TESTS=0
+        FAILED_TESTS=0
+        STARTUP_TIMES=""
+        
+        echo "========================================"
+        echo "超级节点Deployment沙箱复用性能测试"
+        echo "========================================"
+        echo "集群ID: $CLUSTER_ID"
+        echo "测试迭代: $ITERATIONS 次"
+        echo "Pod副本数: $REPLICAS 个"
+        echo "命名空间: $NAMESPACE"
+        echo "Pod镜像: $POD_IMAGE"
+        echo "资源限制: CPU=$CPU_LIMIT, Memory=$MEMORY_LIMIT"
+        echo "开始时间: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "========================================"
+        
+        # 🔍 获取超级节点信息
+        echo "🔍 获取超级节点信息..."
+        SUPERNODES=$(kubectl get nodes -l node.kubernetes.io/instance-type=eklet --no-headers 2>/dev/null | awk '{print $1}' | head -1)
+        
+        if [ -z "$SUPERNODES" ]; then
+          echo "❌ 未发现超级节点"
+          exit 1
+        fi
+        
+        node_name=$(echo $SUPERNODES | head -1)
+        echo "📊 超级节点信息:"
+        echo "节点数量: $(echo $SUPERNODES | wc -w)"
+        for node in $SUPERNODES; do
+          echo "- $node"
+        done
+        echo "🎯 选择测试节点: $node_name"
+        
+        echo "📋 测试策略: 两次Pod创建对比测试（基准测试 vs 沙箱复用测试）"
+        echo "⏱️  销毁间隔: $DELAY ($(echo $DELAY | sed 's/s/秒/')后销毁Pod)"
+        
+        # 执行测试迭代
+        for i in $(seq 1 $ITERATIONS); do
+          echo ""
+          echo "========================================"
+          if [ $i -eq 1 ]; then
+            echo "第${i}次测试：基准测试（首次创建沙箱）"
+            TEST_TYPE="基准测试"
+          else
+            echo "第${i}次测试：沙箱复用测试"
+            TEST_TYPE="沙箱复用测试"
+          fi
+          echo "========================================"
+          
+          DEPLOYMENT_NAME="${DEPLOYMENT_NAME_PREFIX}-sandbox-reuse-test"
+          
+          echo "🚀 创建Deployment: $DEPLOYMENT_NAME (包含 $REPLICAS 个Pod) - $TEST_TYPE"
+          echo "  📝 创建Deployment配置: $REPLICAS 个副本"
+          echo "  🎯 目标: 并发创建 $REPLICAS 个Pod"
+          
+          # 记录Deployment创建开始时间（毫秒级精度）
+          DEPLOYMENT_START_TIME=$(date +%s%3N)
+          DEPLOYMENT_CREATE_TIMESTAMP=$(date -Iseconds)
+          
+          # 创建优化的Deployment
+          kubectl apply -f - <<DEPLOY_EOF
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: $DEPLOYMENT_NAME
+          namespace: $NAMESPACE
+          labels:
+            app: sandbox-deployment-test
+            cluster-id: "$CLUSTER_ID"
+            sandbox-reuse-test: "true"
+            version: "v1"
+          annotations:
+            deployment.kubernetes.io/revision: "1"
+            description: "超级节点沙箱复用测试Deployment"
+            deployment.kubernetes.io/desired-replicas: "$REPLICAS"
+            created-at: "$(date -Iseconds)"
+        spec:
+          replicas: $REPLICAS
+          
+          # 部署策略：支持并发创建
+          strategy:
+            type: RollingUpdate
+            rollingUpdate:
+              maxUnavailable: 0
+              maxSurge: 100%  # 允许同时创建所有Pod
+          
+          # 进度截止时间
+          progressDeadlineSeconds: 600
+          
+          # 修订历史限制
+          revisionHistoryLimit: 3
+          
+          selector:
+            matchLabels:
+              app: sandbox-deployment-test
+              sandbox-reuse-test: "true"
+          
+          template:
+            metadata:
+              labels:
+                app: sandbox-deployment-test
+                cluster-id: "$CLUSTER_ID"
+                sandbox-reuse-test: "true"
+                version: "v1"
+              annotations:
+                # 禁用LoadBalancer功能（腾讯云特定）
+                service.cloud.tencent.com/direct-access: "true"
+                # Pod创建时间戳
+                created-at: "$(date -Iseconds)"
+            spec:
+              # 节点调度配置
+              nodeName: $node_name
+              nodeSelector:
+                node.kubernetes.io/instance-type: eklet
+              
+              # 容忍度配置
+              tolerations:
+              - operator: Exists
+                effect: NoSchedule
+              - key: node.kubernetes.io/not-ready
+                operator: Exists
+                effect: NoExecute
+                tolerationSeconds: 300
+              
+              # 亲和性配置（可选：分散部署）
+              affinity:
+                podAntiAffinity:
+                  preferredDuringSchedulingIgnoredDuringExecution:
+                  - weight: 50
+                    podAffinityTerm:
+                      labelSelector:
+                        matchLabels:
+                          app: sandbox-deployment-test
+                      topologyKey: kubernetes.io/hostname
+              
+              containers:
+              - name: test-container
+                image: $POD_IMAGE
+                imagePullPolicy: IfNotPresent
+                
+                resources:
+                  requests:
+                    cpu: $CPU_REQUEST
+                    memory: $MEMORY_REQUEST
+                  limits:
+                    cpu: $CPU_LIMIT
+                    memory: $MEMORY_LIMIT
+                
+                command: ["/bin/sh"]
+                args: ["-c", "echo 'Pod started at \$(date) on node $node_name' && sleep 300"]
+                
+                # 优化的就绪性探针
+                readinessProbe:
+                  exec:
+                    command: ["/bin/sh", "-c", "echo ready"]
+                  initialDelaySeconds: 1
+                  periodSeconds: 1
+                  timeoutSeconds: 1
+                  failureThreshold: 1
+                
+                # 存活性探针
+                livenessProbe:
+                  exec:
+                    command: ["/bin/sh", "-c", "echo alive"]
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                  timeoutSeconds: 1
+                  failureThreshold: 3
+                
+                # 安全上下文
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: false
+                  runAsNonRoot: false
+              
+              restartPolicy: Always
+        DEPLOY_EOF
+          
+          if [ $? -ne 0 ]; then
+            echo "❌ Deployment创建失败"
+            FAILED_TESTS=$((FAILED_TESTS + 1))
+            continue
+          fi
+          
+          # 等待所有Pod被创建（不等待启动完成）
+          echo "  📊 监控Pod创建过程..."
+          echo "  🎯 目标: 创建 $REPLICAS 个Pod"
+          # 安全处理超时值，支持带s后缀和纯数字
+          if [[ "$TIMEOUT" =~ ^[0-9]+s$ ]]; then
+            timeout_seconds=$(echo $TIMEOUT | sed 's/s$//')
+          elif [[ "$TIMEOUT" =~ ^[0-9]+$ ]]; then
+            timeout_seconds=$TIMEOUT
+          else
+            timeout_seconds=300  # 默认5分钟
+          fi
+          count=0
+          all_pods_created=false
+          pod_creation_time=""
+          
+          # 第一阶段：等待所有Pod被创建（不管是否Ready）
+          while [ $count -lt $timeout_seconds ]; do
+            TOTAL_PODS=$(kubectl get pods -n $NAMESPACE -l sandbox-reuse-test=true --no-headers 2>/dev/null | wc -l | tr -d ' ')
+            
+            # 每3秒显示一次进度
+            if [ $((count % 3)) -eq 0 ]; then
+              echo "  ⏳ 等待Pod创建... 当前已创建: $TOTAL_PODS/$REPLICAS (${count}s)"
+              # 显示Deployment状态
+              READY_REPLICAS=$(kubectl get deployment $DEPLOYMENT_NAME -n $NAMESPACE -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+              AVAILABLE_REPLICAS=$(kubectl get deployment $DEPLOYMENT_NAME -n $NAMESPACE -o jsonpath='{.status.availableReplicas}' 2>/dev/null || echo "0")
+              UPDATED_REPLICAS=$(kubectl get deployment $DEPLOYMENT_NAME -n $NAMESPACE -o jsonpath='{.status.updatedReplicas}' 2>/dev/null || echo "0")
+              echo "  📊 Deployment状态: Ready=$READY_REPLICAS, Available=$AVAILABLE_REPLICAS, Updated=$UPDATED_REPLICAS, Target=$REPLICAS"
+            fi
+            
+            if [ "$TOTAL_PODS" -eq "$REPLICAS" ]; then
+              POD_CREATION_END_TIME=$(date +%s%3N)
+              
+              echo "  ✅ 所有 $REPLICAS 个Pod已创建，开始分析Pod创建时间..."
+              
+              # 计算Pod创建时间（从Deployment创建到Pod被创建完成）
+              echo "  🔍 计算Pod创建时间..."
+              
+              # 等待一段时间确保Pod都已被创建
+              echo "  ⏳ 等待3秒确保Pod创建完成..."
+              sleep 3
+              
+              # 存储Pod创建时间
+              POD_CREATION_TIMES=""
+              
+              # 将Deployment创建时间转换为秒级时间戳（用于计算）
+              DEPLOYMENT_START_TS=$(echo "$DEPLOYMENT_START_TIME" | awk '{printf "%.0f", $1/1000}')
+              echo "  🔍 Deployment创建时间戳: $DEPLOYMENT_START_TS ($(date -d @$DEPLOYMENT_START_TS '+%Y-%m-%d %H:%M:%S'))"
+              
+              for pod in $(kubectl get pods -n $NAMESPACE -l sandbox-reuse-test=true --no-headers -o custom-columns=NAME:.metadata.name); do
+                echo "    📋 分析Pod $pod..."
+                
+                # 获取Pod创建时间 (metadata.creationTimestamp)
+                POD_CREATE_TIME=$(kubectl get pod $pod -n $NAMESPACE -o jsonpath='{.metadata.creationTimestamp}')
+                
+                echo "      📅 时间点:"
+                echo "        Pod创建时间: $POD_CREATE_TIME"
+                
+                # 计算从Deployment创建到Pod创建的时间差
+                if [ -n "$POD_CREATE_TIME" ]; then
+                  POD_CREATE_TS=$(date -d "$POD_CREATE_TIME" +%s 2>/dev/null || echo "0")
+                  echo "      🔍 Pod创建时间戳: $POD_CREATE_TS ($(date -d @$POD_CREATE_TS '+%Y-%m-%d %H:%M:%S'))"
+                  
+                  if [ "$POD_CREATE_TS" -gt 0 ] && [ "$POD_CREATE_TS" -ge "$DEPLOYMENT_START_TS" ]; then
+                    POD_CREATION_DELAY=$((POD_CREATE_TS - DEPLOYMENT_START_TS))
+                    echo "      ⏱️  Pod创建耗时: ${POD_CREATION_DELAY}秒"
+                    
+                    if [ -z "$POD_CREATION_TIMES" ]; then
+                      POD_CREATION_TIMES="$POD_CREATION_DELAY"
+                    else
+                      POD_CREATION_TIMES="$POD_CREATION_TIMES $POD_CREATION_DELAY"
+                    fi
+                  else
+                    echo "      ⚠️  时间戳无效或顺序错误"
+                    echo "        Deployment时间戳: $DEPLOYMENT_START_TS"
+                    echo "        Pod时间戳: $POD_CREATE_TS"
+                  fi
+                else
+                  echo "      ⚠️  无法获取Pod创建时间"
+                fi
+              done
+              
+              # 计算Pod创建时间统计
+              echo "  📊 Pod创建时间统计:"
+              
+              if [ -n "$POD_CREATION_TIMES" ]; then
+                POD_CREATION_STATS=$(echo "$POD_CREATION_TIMES" | awk '{
+                  sum = 0; min = $1; max = $1; count = NF
+                  for(i=1; i<=NF; i++) {
+                    sum += $i
+                    if($i < min) min = $i
+                    if($i > max) max = $i
+                  }
+                  avg = sum / count
+                  printf "%.1f %.1f %.1f", avg, min, max
+                }')
+                
+                AVG_POD_CREATION=$(echo "$POD_CREATION_STATS" | awk '{print $1}')
+                MIN_POD_CREATION=$(echo "$POD_CREATION_STATS" | awk '{print $2}')
+                MAX_POD_CREATION=$(echo "$POD_CREATION_STATS" | awk '{print $3}')
+                
+                echo "    平均Pod创建时间: ${AVG_POD_CREATION}秒"
+                echo "    最快Pod创建时间: ${MIN_POD_CREATION}秒"
+                echo "    最慢Pod创建时间: ${MAX_POD_CREATION}秒"
+                
+                # 使用平均Pod创建时间作为主要指标
+                pod_creation_time_sec="$AVG_POD_CREATION"
+                echo "  ✅ 使用平均Pod创建时间: ${pod_creation_time_sec}秒"
+              else
+                # 如果无法获取Pod级别的时间，使用Deployment监控时间作为备用
+                echo "  ⚠️ 无法获取Pod级别的时间，使用Deployment监控时间"
+                pod_creation_time_ms=$((POD_CREATION_END_TIME - DEPLOYMENT_START_TIME))
+                echo "  🔍 调试：DEPLOYMENT_START_TIME=$DEPLOYMENT_START_TIME, POD_CREATION_END_TIME=$POD_CREATION_END_TIME"
+                echo "  🔍 调试：时间差(ms)=$pod_creation_time_ms"
+                
+                if [ $pod_creation_time_ms -gt 0 ]; then
+                  pod_creation_time_sec=$(echo "$pod_creation_time_ms" | awk '{printf "%.1f", $1/1000}')
+                else
+                  # 如果时间差为0或负数，说明时间计算有问题，使用一个合理的默认值
+                  pod_creation_time_sec="1.0"
+                  echo "  ⚠️ 时间计算异常，使用默认值1.0秒"
+                fi
+                echo "  ⚠️ 使用Deployment监控时间作为备用: ${pod_creation_time_sec}秒"
+              fi
+              
+              echo "  ✅ Pod创建时间分析完成: ${pod_creation_time_sec}秒"
+              all_pods_created=true
+              break
+            fi
+            
+            if [ $((count % 5)) -eq 0 ] && [ $count -gt 0 ]; then
+              echo "  ⏳ 等待Pod创建... 当前已创建: $TOTAL_PODS/$REPLICAS (${count}s)"
+            fi
+            
+            sleep 1  # 每秒检查一次
+            count=$((count + 1))
+          done
+          
+          if [ "$all_pods_created" = false ]; then
+            echo "  ❌ 超时：Pod创建未完成，当前已创建: $TOTAL_PODS/$REPLICAS"
+            FAILED_TESTS=$((FAILED_TESTS + 1))
+            # 清理失败的Deployment
+            kubectl delete deployment $DEPLOYMENT_NAME -n $NAMESPACE --ignore-not-found=true
+            continue
+          fi
+          
+          # 记录Pod创建时间（当前计算方式，用于对比）
+          if [ -z "$STARTUP_TIMES" ]; then
+            STARTUP_TIMES="$pod_creation_time_sec"
+          else
+            STARTUP_TIMES="$STARTUP_TIMES $pod_creation_time_sec"
+          fi
+          
+          # 新增：计算准确的时间指标
+          echo "  🔍 计算准确的时间指标..."
+          
+          # 存储准确的时间指标
+          SANDBOX_INIT_TIMES=""
+          END_TO_END_TIMES=""
+          SCHEDULING_WAIT_TIMES=""
+          
+          for pod in $(kubectl get pods -n $NAMESPACE -l sandbox-reuse-test=true --no-headers -o custom-columns=NAME:.metadata.name); do
+            echo "    📊 分析Pod $pod的详细时间指标..."
+            
+            # 获取Pod创建时间（沙箱开始初始化）
+            POD_CREATE_TIME=$(kubectl get pod $pod -n $NAMESPACE -o jsonpath='{.metadata.creationTimestamp}')
+            POD_CREATE_TS=$(date -d "$POD_CREATE_TIME" +%s 2>/dev/null || echo "0")
+            
+            # 获取Pod Ready时间（端到端结束）
+            POD_READY_TIME=$(kubectl get pod $pod -n $NAMESPACE -o jsonpath='{.status.conditions[?(@.type=="Ready")].lastTransitionTime}' 2>/dev/null || echo "")
+            POD_READY_TS=$(date -d "$POD_READY_TIME" +%s 2>/dev/null || echo "0")
+            
+            # 获取沙箱就绪相关事件（通过Events）
+            SANDBOX_EVENTS=$(kubectl get events -n $NAMESPACE --field-selector involvedObject.name=$pod --sort-by='.firstTimestamp' -o json 2>/dev/null || echo "")
+            
+            # 尝试从事件中获取沙箱就绪时间
+            SANDBOX_READY_TS=""
+            if [ -n "$SANDBOX_EVENTS" ]; then
+              # 查找Pulled或Started事件作为沙箱就绪的标志
+              SANDBOX_READY_TIME=$(echo "$SANDBOX_EVENTS" | jq -r '.items[] | select(.reason=="Pulled" or .reason=="Started") | .firstTimestamp' | head -1)
+              if [ -n "$SANDBOX_READY_TIME" ] && [ "$SANDBOX_READY_TIME" != "null" ]; then
+                SANDBOX_READY_TS=$(date -d "$SANDBOX_READY_TIME" +%s 2>/dev/null || echo "0")
+              fi
+            fi
+            
+            # 如果无法从事件获取，使用容器状态作为近似
+            if [ -z "$SANDBOX_READY_TS" ] || [ "$SANDBOX_READY_TS" -eq 0 ]; then
+              # 获取容器启动时间
+              CONTAINER_START_TIME=$(kubectl get pod $pod -n $NAMESPACE -o jsonpath='{.status.containerStatuses[0].state.running.startedAt}' 2>/dev/null || echo "")
+              if [ -n "$CONTAINER_START_TIME" ]; then
+                SANDBOX_READY_TS=$(date -d "$CONTAINER_START_TIME" +%s 2>/dev/null || echo "0")
+              else
+                # 使用Pod创建时间+2秒作为近似
+                SANDBOX_READY_TS=$((POD_CREATE_TS + 2))
+              fi
+            fi
+            
+            # 计算时间指标
+            if [ "$POD_CREATE_TS" -gt 0 ] && [ "$SANDBOX_READY_TS" -gt 0 ] && [ "$POD_READY_TS" -gt 0 ]; then
+              # 沙箱初始化耗时（Pod创建到沙箱就绪）
+              SANDBOX_INIT_TIME=$((SANDBOX_READY_TS - POD_CREATE_TS))
+              
+              # 端到端耗时（Pod创建到PodReady）
+              END_TO_END_TIME=$((POD_READY_TS - POD_CREATE_TS))
+              
+              # 调度等待耗时（端到端 - 沙箱初始化）
+              SCHEDULING_WAIT_TIME=$((END_TO_END_TIME - SANDBOX_INIT_TIME))
+              
+              # 确保时间不为负数
+              [ $SANDBOX_INIT_TIME -lt 0 ] && SANDBOX_INIT_TIME=0
+              [ $END_TO_END_TIME -lt 0 ] && END_TO_END_TIME=0
+              [ $SCHEDULING_WAIT_TIME -lt 0 ] && SCHEDULING_WAIT_TIME=0
+              
+              echo "      📅 时间戳:"
+              echo "        Pod创建时间: $(date -d @$POD_CREATE_TS '+%H:%M:%S')"
+              echo "        沙箱就绪时间: $(date -d @$SANDBOX_READY_TS '+%H:%M:%S')"
+              echo "        PodReady时间: $(date -d @$POD_READY_TS '+%H:%M:%S')"
+              
+              echo "      ⏱️  时间指标:"
+              echo "        沙箱初始化耗时: ${SANDBOX_INIT_TIME}秒"
+              echo "        端到端耗时: ${END_TO_END_TIME}秒"
+              echo "        调度等待耗时: ${SCHEDULING_WAIT_TIME}秒"
+              
+              # 累加时间
+              SANDBOX_INIT_TIMES="$SANDBOX_INIT_TIMES $SANDBOX_INIT_TIME"
+              END_TO_END_TIMES="$END_TO_END_TIMES $END_TO_END_TIME"
+              SCHEDULING_WAIT_TIMES="$SCHEDULING_WAIT_TIMES $SCHEDULING_WAIT_TIME"
+            else
+              echo "      ⚠️  无法获取完整时间信息"
+            fi
+          done
+          
+          # 第二阶段：等待Pod就绪验证
+          echo "  ⏳ 等待Pod就绪验证..."
+          ready_count=0
+          while [ $ready_count -lt 60 ]; do  # 最多等待60秒验证
+            READY_REPLICAS=$(kubectl get deployment $DEPLOYMENT_NAME -n $NAMESPACE -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+            
+            if [ "$READY_REPLICAS" = "$REPLICAS" ]; then
+              echo "  ✅ 所有Pod已就绪，功能验证通过"
+              break
+            fi
+            
+            if [ $((ready_count % 10)) -eq 0 ] && [ $ready_count -gt 0 ]; then
+              echo "  ⏳ 等待Pod就绪... 当前就绪: $READY_REPLICAS/$REPLICAS (${ready_count}s)"
+            fi
+            
+            sleep 1
+            ready_count=$((ready_count + 1))
+          done
+          
+          if [ "$READY_REPLICAS" != "$REPLICAS" ]; then
+            echo "  ⚠️ 警告：部分Pod未就绪，但Pod创建测试已完成"
+          fi
+          
+          # 显示Pod详情
+          echo "  📊 Pod创建详情:"
+          POD_COUNT=1
+          kubectl get pods -n $NAMESPACE -l sandbox-reuse-test=true --no-headers 2>/dev/null | while read line; do
+            POD_NAME=$(echo $line | awk '{print $1}')
+            POD_STATUS=$(echo $line | awk '{print $3}')
+            POD_NODE=$(echo $line | awk '{print $7}')
+            POD_AGE=$(echo $line | awk '{print $5}')
+            
+            # 获取Pod创建时间
+            POD_CREATION_TIME=$(kubectl get pod $POD_NAME -n $NAMESPACE -o jsonpath='{.metadata.creationTimestamp}' 2>/dev/null || echo "未知")
+            
+            echo "Pod-$POD_COUNT: $POD_NAME"
+            echo "节点: $POD_NODE"
+            echo "创建时间: $POD_CREATION_TIME"
+            echo "状态: $POD_STATUS"
+            POD_COUNT=$((POD_COUNT + 1))
+          done
+          
+          echo "📈 测试结果: 创建了 $REPLICAS 个Pod，耗时 $pod_creation_time_sec 秒"
+          echo "🎉 ${TEST_TYPE}成功"
+          
+          SUCCESSFUL_TESTS=$((SUCCESSFUL_TESTS + 1))
+          
+          # 清理当前测试的Deployment
+          echo "  🧹 清理测试资源..."
+          kubectl delete deployment $DEPLOYMENT_NAME -n $NAMESPACE --ignore-not-found=true
+          
+          # 等待清理完成
+          echo "  ⏳ 等待资源清理完成..."
+          cleanup_count=0
+          while [ $cleanup_count -lt 10 ]; do
+            REMAINING_PODS=$(kubectl get pods -n $NAMESPACE -l sandbox-reuse-test=true --no-headers 2>/dev/null | wc -l | tr -d ' ')
+            if [ "$REMAINING_PODS" -eq 0 ]; then
+              echo "  ✅ 资源清理完成"
+              break
+            fi
+            echo "  ⏳ 等待清理... 剩余Pod: $REMAINING_PODS"
+            sleep 2
+            cleanup_count=$((cleanup_count + 1))
+          done
+          
+          # 测试间隔
+          if [ $i -lt $TOTAL_TESTS ]; then
+            echo "  ⏳ 等待 ${DELAY_BETWEEN_TESTS} 后进行下一次测试..."
+            sleep ${DELAY_BETWEEN_TESTS}
+          fi
+          
+        done
+        
+        # 计算新的准确时间指标统计
+        echo ""
+        echo "📊 准确时间指标统计:"
+        
+        # 沙箱初始化耗时统计
+        if [ -n "$SANDBOX_INIT_TIMES" ]; then
+          SANDBOX_INIT_STATS=$(echo "$SANDBOX_INIT_TIMES" | awk '{
+            sum = 0; min = $1; max = $1; count = NF
+            for(i=1; i<=NF; i++) {
+              sum += $i
+              if($i < min) min = $i
+              if($i > max) max = $i
+            }
+            avg = sum / count
+            printf "%.1f %.1f %.1f", avg, min, max
+          }')
+          
+          AVG_SANDBOX_INIT=$(echo "$SANDBOX_INIT_STATS" | awk '{print $1}')
+          MIN_SANDBOX_INIT=$(echo "$SANDBOX_INIT_STATS" | awk '{print $2}')
+          MAX_SANDBOX_INIT=$(echo "$SANDBOX_INIT_STATS" | awk '{print $3}')
+          
+          echo "  📋 沙箱初始化耗时（不含调度等待）:"
+          echo "    平均: ${AVG_SANDBOX_INIT}秒"
+          echo "    最快: ${MIN_SANDBOX_INIT}秒"
+          echo "    最慢: ${MAX_SANDBOX_INIT}秒"
+        fi
+        
+        # 端到端耗时统计
+        if [ -n "$END_TO_END_TIMES" ]; then
+          END_TO_END_STATS=$(echo "$END_TO_END_TIMES" | awk '{
+            sum = 0; min = $1; max = $1; count = NF
+            for(i=1; i<=NF; i++) {
+              sum += $i
+              if($i < min) min = $i
+              if($i > max) max = $i
+            }
+            avg = sum / count
+            printf "%.1f %.1f %.1f", avg, min, max
+          }')
+          
+          AVG_END_TO_END=$(echo "$END_TO_END_STATS" | awk '{print $1}')
+          MIN_END_TO_END=$(echo "$END_TO_END_STATS" | awk '{print $2}')
+          MAX_END_TO_END=$(echo "$END_TO_END_STATS" | awk '{print $3}')
+          
+          echo "  📋 端到端耗时（Pod创建→PodReady）:"
+          echo "    平均: ${AVG_END_TO_END}秒"
+          echo "    最快: ${MIN_END_TO_END}秒"
+          echo "    最慢: ${MAX_END_TO_END}秒"
+        fi
+        
+        # 调度等待耗时统计
+        if [ -n "$SCHEDULING_WAIT_TIMES" ]; then
+          SCHEDULING_WAIT_STATS=$(echo "$SCHEDULING_WAIT_TIMES" | awk '{
+            sum = 0; min = $1; max = $1; count = NF
+            for(i=1; i<=NF; i++) {
+              sum += $i
+              if($i < min) min = $i
+              if($i > max) max = $i
+            }
+            avg = sum / count
+            printf "%.1f %.1f %.1f", avg, min, max
+          }')
+          
+          AVG_SCHEDULING_WAIT=$(echo "$SCHEDULING_WAIT_STATS" | awk '{print $1}')
+          MIN_SCHEDULING_WAIT=$(echo "$SCHEDULING_WAIT_STATS" | awk '{print $2}')
+          MAX_SCHEDULING_WAIT=$(echo "$SCHEDULING_WAIT_STATS" | awk '{print $3}')
+          
+          echo "  📋 调度等待耗时（端到端 - 沙箱初始化）:"
+          echo "    平均: ${AVG_SCHEDULING_WAIT}秒"
+          echo "    最快: ${MIN_SCHEDULING_WAIT}秒"
+          echo "    最慢: ${MAX_SCHEDULING_WAIT}秒"
+        fi
+        
+        # 使用沙箱初始化时间作为主要指标
+        if [ -n "$AVG_SANDBOX_INIT" ]; then
+          echo ""
+          echo "✅ 使用沙箱初始化耗时（Pod创建耗时）: ${AVG_SANDBOX_INIT}秒"
+        fi
+        
+        # 更新最终统计输出
+        echo ""
+        echo "========================================"
+        echo "📊 测试完成统计汇总"
+        echo "========================================"
+        echo "测试时间: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "测试节点: $node_name"
+        echo "Pod副本数: $REPLICAS"
+        echo "总测试次数: $TOTAL_TESTS"
+        echo "成功测试: $SUCCESSFUL_TESTS"
+        echo "失败测试: $FAILED_TESTS"
+        
+        if [ $TOTAL_TESTS -gt 0 ]; then
+          SUCCESS_RATE=$((SUCCESSFUL_TESTS * 100 / TOTAL_TESTS))
+          echo "成功率: ${SUCCESS_RATE}%"
+        fi
+        
+        echo ""
+        echo "📈 性能指标:"
+        if [ -n "$AVG_SANDBOX_INIT" ]; then
+          echo "  平均沙箱初始化耗时: ${AVG_SANDBOX_INIT}秒"
+        fi
+        if [ -n "$AVG_END_TO_END" ]; then
+          echo "  平均端到端耗时: ${AVG_END_TO_END}秒"
+        fi
+        
+        # 详细时间统计
+        if [ -n "$STARTUP_TIMES" ]; then
+          echo ""
+          echo "📈 详细时间统计 (Pod创建时间，不含启动时间):"
+          COUNT=1
+          for time in $STARTUP_TIMES; do
+            if [ $COUNT -eq 1 ]; then
+              echo "基准测试: ${time}秒"
+            else
+              echo "沙箱复用测试: ${time}秒"
+            fi
+            COUNT=$((COUNT + 1))
+          done
+          
+          # 沙箱复用效果分析
+          if [ $COUNT -eq 3 ]; then  # 两次测试
+            FIRST_TIME=$(echo $STARTUP_TIMES | awk '{print $1}')
+            SECOND_TIME=$(echo $STARTUP_TIMES | awk '{print $2}')
+            
+            echo ""
+            echo "🔄 沙箱复用效果分析:"
+            echo "基准测试（首次创建沙箱）: ${FIRST_TIME}秒"
+            echo "沙箱复用测试: ${SECOND_TIME}秒"
+            
+            # 使用awk进行浮点数比较和计算
+            COMPARISON=$(echo "$FIRST_TIME $SECOND_TIME" | awk '{
+              if ($1 > $2) {
+                improvement = $1 - $2
+                if ($1 > 0) {
+                  percent = int(improvement * 100 / $1)
+                } else {
+                  percent = 0
+                }
+                printf "⚡ 性能提升: %.1f秒 (%d%%)", improvement, percent
+              } else if ($1 < $2) {
+                degradation = $2 - $1
+                if ($1 > 0) {
+                  percent = int(degradation * 100 / $1)
+                } else {
+                  percent = 0
+                }
+                printf "⚠️  性能下降: %.1f秒 (%d%%)", degradation, percent
+              } else {
+                printf "📊 两次创建时间相同: %.1f秒", $1
+              }
+            }')
+            echo "$COMPARISON"
+            
+            # 根据结果给出分析
+            ANALYSIS=$(echo "$FIRST_TIME $SECOND_TIME" | awk '{
+              if ($1 > $2) {
+                print "📝 沙箱复用生效，性能有所提升"
+              } else if ($1 < $2) {
+                print "📝 可能原因: 节点负载、网络延迟或沙箱复用未生效"
+              } else {
+                print "📝 沙箱复用可能生效，但性能提升不明显"
+              }
+            }')
+            echo "$ANALYSIS"
+          fi
+        fi
+        
+        echo ""
+        echo "清理测试资源..."
+        
+        echo ""
+        echo "========================================"
+        echo "沙箱复用测试完成！"
+        echo "========================================"
+        
+        if [ $FAILED_TESTS -eq 0 ]; then
+          echo "最终结果: SUCCESS"
+        else
+          echo "最终结果: PARTIAL_SUCCESS"
+        fi
+        
+        echo "完成时间: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "测试节点: $node_name"
+        echo "Pod副本数: $REPLICAS"
+        
+        # 发送企业微信通知
+        echo "🔍 检查企业微信通知配置..."
+        echo "Webhook URL: '$WEBHOOK_URL'"
+        if [ -n "$WEBHOOK_URL" ] && [ "$WEBHOOK_URL" != "" ] && [ "$WEBHOOK_URL" != "YOUR_WEBHOOK_KEY" ]; then
+          echo "📨 发送企业微信通知..."
+          
+          # 构建通知内容
+          if [ $FAILED_TESTS -eq 0 ]; then
+            STATUS_EMOJI="✅"
+            STATUS_TEXT="全部成功"
+          else
+            STATUS_EMOJI="⚠️"
+            STATUS_TEXT="部分失败"
+          fi
+          
+          # 构建时间指标内容
+          METRICS_CONTENT=""
+          if [ -n "$AVG_SANDBOX_INIT" ]; then
+            METRICS_CONTENT="${METRICS_CONTENT}沙箱初始化: ${AVG_SANDBOX_INIT}秒\\n"
+          fi
+          if [ -n "$AVG_END_TO_END" ]; then
+            METRICS_CONTENT="${METRICS_CONTENT}端到端耗时: ${AVG_END_TO_END}秒\\n"
+          fi
+          
+          # 沙箱复用效果分析
+          REUSE_ANALYSIS=""
+          if [ $TOTAL_TESTS -eq 2 ] && [ -n "$AVG_SANDBOX_INIT" ]; then
+            # 提取第一次和第二次的沙箱初始化时间
+            FIRST_INIT=$(echo "$SANDBOX_INIT_TIMES" | awk '{print $1}')
+            SECOND_INIT=$(echo "$SANDBOX_INIT_TIMES" | awk '{print $2}')
+            
+            if [ -n "$FIRST_INIT" ] && [ -n "$SECOND_INIT" ]; then
+              COMPARISON=$(echo "$FIRST_INIT $SECOND_INIT" | awk '{
+                if ($1 > $2) {
+                  improvement = $1 - $2
+                  if ($1 > 0) {
+                    percent = int(improvement * 100 / $1)
+                  } else {
+                    percent = 0
+                  }
+                  printf "⚡ 沙箱复用效果: %.1f秒提升 (%d%%)", improvement, percent
+                } else if ($1 < $2) {
+                  printf "⚠️  性能异常: 第二次比第一次慢"
+                } else {
+                  printf "📊 性能持平: 两次时间相同"
+                }
+              }')
+              REUSE_ANALYSIS="\\n\\n🔄 沙箱复用效果:\\n${COMPARISON}"
+            fi
+          fi
+          
+          # 构建完整的通知消息
+          NOTIFICATION_MESSAGE=$(cat <<EOF
+{
+  "msgtype": "markdown",
+  "markdown": {
+    "content": "## ${STATUS_EMOJI} 超级节点沙箱复用测试报告
+**测试时间**: $(date '+%Y-%m-%d %H:%M:%S')
+**测试状态**: ${STATUS_TEXT}
+**测试节点**: $node_name
+**Pod副本数**: $REPLICAS
+**成功率**: ${SUCCESS_RATE}%
+
+### 📊 时间指标
+${METRICS_CONTENT}${REUSE_ANALYSIS}
+
+### 📋 测试详情
+- 总测试次数: $TOTAL_TESTS
+- 成功测试: $SUCCESSFUL_TESTS
+- 失败测试: $FAILED_TESTS
+
+---
+*由超级节点沙箱复用测试系统自动生成*"
+  }
+}
+EOF
+          )
+          
+          # 发送通知
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            -H "Content-Type: application/json" \
+            -d "$NOTIFICATION_MESSAGE" \
+            "$WEBHOOK_URL")
+          
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          RESPONSE_BODY=$(echo "$RESPONSE" | sed '$d')
+          
+          if [ "$HTTP_CODE" -eq 200 ]; then
+            echo "  ✅ 企业微信通知发送成功"
+          else
+            echo "  ❌ 企业微信通知发送失败"
+            echo "  HTTP状态码: $HTTP_CODE"
+            echo "  响应: $RESPONSE_BODY"
+          fi
+        else
+          echo "  ℹ️  未配置企业微信通知或配置无效"
+        fi
+        
+        # 根据测试结果决定退出状态
+        if [ $FAILED_TESTS -eq 0 ]; then
+          echo "success" > /tmp/result
+          echo "🎉 所有测试都成功完成！"
+        else
+          echo "partial_failure" > /tmp/result
+          echo "⚠️ 部分测试失败，请检查日志"
+        fi
+    outputs:
+      parameters:
+      - name: result
+        valueFrom:
+          path: /tmp/result

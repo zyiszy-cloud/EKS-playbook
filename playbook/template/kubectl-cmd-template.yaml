@@ -9,20 +9,20 @@
 #     1. cmd: 执行的kubectl命令
 #     2. kubeconfig-secret-name: 用于指定接入的K8s集群的kubeconfig凭证的secret名称, 如果为空，则默认为当前集群
 #   kubectl-script模版参数说明:
-#     1. source: 执行的kubectl命令的yaml配置
+#     1. source: 执行的脚本内容
 #     2. kubeconfig-secret-name: 用于指定接入的K8s集群的kubeconfig凭证的secret名称, 如果为空，则默认为当前集群
 apiVersion: argoproj.io/v1alpha1
 kind: ClusterWorkflowTemplate
 metadata:
   name: kubectl-cmd
+  annotations:
+    description: "统一kubectl命令执行模板，支持内外部集群"
+    version: "2.0"
 spec:
-  entrypoint: kubectl-cmd
   templates:
   - name: kubectl-mutating-cmd
     inputs:
       parameters:
-      - name: image
-        default: "bitnami/kubectl:1.32.4"
       - name: action
         description: "执行的kubectl命令, 支持create/apply/delete"
       - name: manifest
@@ -34,8 +34,6 @@ spec:
       - name: internal-kubectl-mutating-cmd
         arguments:
           parameters:
-          - name: image
-            value: "{{inputs.parameters.image}}"
           - name: action
             value: "{{inputs.parameters.action}}"
           - name: manifest
@@ -45,8 +43,6 @@ spec:
       - name: external-kubectl-mutating-cmd
         arguments:
           parameters:
-          - name: image
-            value: "{{inputs.parameters.image}}"
           - name: action
             value: "{{inputs.parameters.action}}"
           - name: manifest
@@ -64,52 +60,87 @@ spec:
   - name: external-kubectl-mutating-cmd
     inputs:
       parameters:
-      - name: image
-        default: "bitnami/kubectl:1.32.4"
       - name: action
       - name: manifest
       - name: kubeconfig-secret-name
-    script:
-      image: "{{inputs.parameters.image}}"
-      command: [bash]
-      source: |
-        #!/bin/bash
-        cat <<EOF | kubectl {{inputs.parameters.action}} -f -
-        {{inputs.parameters.manifest}}
-        EOF
-      volumeMounts:
-      - name: kubeconfig
-        mountPath: "/.kube"
-        readOnly: true
-    volumes:
-    - name: kubeconfig
-      secret:
-        secretName: "{{inputs.parameters.kubeconfig-secret-name}}"
-        items:
-        - key: config
-          path: config
+    resource:
+      action: create
+      manifest: |
+        apiVersion: v1
+        kind: Pod
+        metadata:
+          generateName: kubectl-mutating-cmd-
+        spec:
+          serviceAccountName: tke-chaos
+          containers:
+          - name: kubectl
+            image: bitnami/kubectl:1.32.4
+            command: ["sh", "-c"]
+            args:
+            - |
+              set -e
+              # 复制kubeconfig到合适位置
+              mkdir -p /.kube
+              cp /kubeconfig/config /.kube/
+              # 执行kubectl命令
+              cat <<EOF | kubectl {{inputs.parameters.action}} -f -
+              {{inputs.parameters.manifest}}
+              EOF
+              echo "success" > /tmp/result
+            volumeMounts:
+            - name: kubeconfig
+              mountPath: /kubeconfig
+              readOnly: true
+          restartPolicy: Never
+          volumes:
+          - name: kubeconfig
+            secret:
+              secretName: {{inputs.parameters.kubeconfig-secret-name}}
+              items:
+              - key: config
+                path: config
+    outputs:
+      parameters:
+      - name: result
+        valueFrom:
+          path: /tmp/result
 
   - name: internal-kubectl-mutating-cmd
     inputs:
       parameters:
-      - name: image
-        default: "bitnami/kubectl:1.32.4"
       - name: action
       - name: manifest
-    script:
-      image: "{{inputs.parameters.image}}"
-      command: [bash]
-      source: |
-        #!/bin/bash
-        cat <<EOF | kubectl {{inputs.parameters.action}} -f -
-        {{inputs.parameters.manifest}}
-        EOF
+    resource:
+      action: create
+      manifest: |
+        apiVersion: v1
+        kind: Pod
+        metadata:
+          generateName: kubectl-mutating-cmd-
+        spec:
+          serviceAccountName: tke-chaos
+          containers:
+          - name: kubectl
+            image: bitnami/kubectl:1.32.4
+            command: ["sh", "-c"]
+            args:
+            - |
+              set -e
+              # 使用集群内的kubeconfig
+              cat <<EOF | kubectl {{inputs.parameters.action}} -f -
+              {{inputs.parameters.manifest}}
+              EOF
+              echo "success" > /tmp/result
+          restartPolicy: Never
+    outputs:
+      parameters:
+      - name: result
+        valueFrom:
+          path: /tmp/result
 
   - name: kubectl-cmd
     inputs:
       parameters:
-      - name: image
-        default: "bitnami/kubectl:1.32.4"
       - name: cmd
         description: "执行的kubectl命令, 如: get pods -n default"
       - name: kubeconfig-secret-name
@@ -119,8 +150,6 @@ spec:
       - name: internal-kubectl-cmd
         arguments:
           parameters:
-          - name: image
-            value: "{{inputs.parameters.image}}"
           - name: cmd
             value: "{{inputs.parameters.cmd}}"
           - name: kubeconfig-secret-name
@@ -130,8 +159,6 @@ spec:
       - name: external-kubectl-cmd
         arguments:
           parameters:
-          - name: image
-            value: "{{inputs.parameters.image}}"
           - name: cmd
             value: "{{inputs.parameters.cmd}}"
           - name: kubeconfig-secret-name
@@ -147,40 +174,75 @@ spec:
   - name: internal-kubectl-cmd
     inputs:
       parameters:
-      - name: image
-        default: "bitnami/kubectl:1.32.4"
       - name: cmd
-    script:
-      image: "{{inputs.parameters.image}}"
-      command: [bash]
-      source: |
-        #!/bin/bash
-        kubectl {{inputs.parameters.cmd}}
+      - name: kubeconfig-secret-name
+    resource:
+      action: create
+      manifest: |
+        apiVersion: v1
+        kind: Pod
+        metadata:
+          generateName: kubectl-cmd-
+        spec:
+          serviceAccountName: tke-chaos
+          containers:
+          - name: kubectl
+            image: bitnami/kubectl:1.32.4
+            command: ["sh", "-c"]
+            args:
+            - |
+              set -e
+              kubectl {{inputs.parameters.cmd}}
+              echo "success" > /tmp/result
+          restartPolicy: Never
+    outputs:
+      parameters:
+      - name: result
+        valueFrom:
+          path: /tmp/result
 
   - name: external-kubectl-cmd
     inputs:
       parameters:
-      - name: image
-        default: "bitnami/kubectl:1.32.4"
       - name: cmd
       - name: kubeconfig-secret-name
-    script:
-      image: "{{inputs.parameters.image}}"
-      command: [bash]
-      source: |
-        #!/bin/bash
-        kubectl {{inputs.parameters.cmd}}
-      volumeMounts:
-      - name: kubeconfig
-        mountPath: "/.kube"
-        readOnly: true
-    volumes:
-    - name: kubeconfig
-      secret:
-        secretName: "{{inputs.parameters.kubeconfig-secret-name}}"
-        items:
-        - key: config
-          path: config
+    resource:
+      action: create
+      manifest: |
+        apiVersion: v1
+        kind: Pod
+        metadata:
+          generateName: kubectl-cmd-
+        spec:
+          serviceAccountName: tke-chaos
+          containers:
+          - name: kubectl
+            image: bitnami/kubectl:1.32.4
+            command: ["sh", "-c"]
+            args:
+            - |
+              set -e
+              mkdir -p /.kube
+              cp /kubeconfig/config /.kube/
+              kubectl {{inputs.parameters.cmd}}
+              echo "success" > /tmp/result
+            volumeMounts:
+            - name: kubeconfig
+              mountPath: /kubeconfig
+              readOnly: true
+          restartPolicy: Never
+          volumes:
+          - name: kubeconfig
+            secret:
+              secretName: {{inputs.parameters.kubeconfig-secret-name}}
+              items:
+              - key: config
+                path: config
+    outputs:
+      parameters:
+      - name: result
+        valueFrom:
+          path: /tmp/result
 
   - name: kubectl-script
     inputs:
@@ -229,7 +291,14 @@ spec:
       image: "{{inputs.parameters.image}}"
       command: [bash]
       source: |
+        set -e
         {{inputs.parameters.source}}
+        echo "success" > /tmp/result
+    outputs:
+      parameters:
+      - name: result
+        valueFrom:
+          path: /tmp/result
 
   - name: external-kubectl-script
     inputs:
@@ -242,10 +311,14 @@ spec:
       image: "{{inputs.parameters.image}}"
       command: [bash]
       source: |
+        set -e
+        mkdir -p ~/.kube
+        cp /kubeconfig/config ~/.kube/config
         {{inputs.parameters.source}}
+        echo "success" > /tmp/result
       volumeMounts:
       - name: kubeconfig
-        mountPath: "/.kube"
+        mountPath: "/kubeconfig"
         readOnly: true
     volumes:
     - name: kubeconfig
@@ -254,3 +327,8 @@ spec:
         items:
         - key: config
           path: config
+    outputs:
+      parameters:
+      - name: result
+        valueFrom:
+          path: /tmp/result

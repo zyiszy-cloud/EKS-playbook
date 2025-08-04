@@ -1,0 +1,151 @@
+---
+# 功能说明: 企微群通知模版
+# generate-apiserver-overload-test-notify-message: 生成Markdown消息
+# generate-apiserver-overload-test-message-then-notify: 生成Markdown消息并发送到企微群
+# notify: 发送Markdown消息到企微群
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: wechat-notify-template
+spec:
+  entrypoint: notify
+  templates:
+  - name: generate-apiserver-overload-test-message-then-notify
+    inputs:
+      parameters:
+      # generate-message参数
+      - name: stage
+        dscription: "阶段"
+      - name: cluster-id
+        dscription: "集群ID"
+      - name: chaos-type
+        dscription: "故障类型"
+      - name: concurrency
+        default: "N/A"
+        dscription: "并发执行压测的Pod数"
+      - name: QPS
+        dscription: "单个压测Pod每秒执行list的QPS"
+        default: "N/A"
+      - name: total-duration
+        default: "N/A"
+        dscription: "持续时间"
+      - name: cluster-status
+        default: "N/A"
+        dscription: "集群状态"
+      - name: controll-plane-metrics
+        default: "N/A"
+        dscription: "控制面metrics"
+      - name: check-result
+        default: "N/A"
+        dscription: "校验结果"
+      - name: details-message
+        default: "N/A"
+        dscription: "详细信息"
+      # notify参数
+      - name: webhook-url
+    steps:
+    - - name: generate-apiserver-overload-test-notify-message
+        template: generate-apiserver-overload-test-notify-message
+        arguments:
+          parameters:
+          - name: stage
+            value: "{{inputs.parameters.stage}}"
+          - name: cluster-id
+            value: "{{inputs.parameters.cluster-id}}"
+          - name: chaos-type
+            value: "{{inputs.parameters.chaos-type}}"
+          - name: concurrency
+            value: "{{inputs.parameters.concurrency}}"
+          - name: QPS
+            value: "{{inputs.parameters.QPS}}"
+          - name: total-duration
+            value: "{{inputs.parameters.total-duration}}"
+          - name: cluster-status
+            value: "{{inputs.parameters.cluster-status}}"
+          - name: controll-plane-metrics
+            value: "{{inputs.parameters.controll-plane-metrics}}"
+          - name: check-result
+            value: "{{inputs.parameters.check-result}}"
+          - name: details-message
+            value: "{{inputs.parameters.details-message}}"
+    - - name: notify-apiserver-overload-test-to-wechat
+        template: notify
+        arguments:
+          parameters:
+          - name: message
+            value: |
+              {
+                "msgtype": "markdown",
+                "markdown": {
+                  "content": "{{steps.generate-apiserver-overload-test-notify-message.outputs.result}}"
+                }
+              }
+          - name: webhook-url
+            value: "{{inputs.parameters.webhook-url}}"
+
+  - name: generate-apiserver-overload-test-notify-message
+    inputs:
+      parameters:
+      - name: stage
+        description: "阶段"
+      - name: cluster-id
+        description: "集群ID"
+      - name: chaos-type
+        description: "故障类型"
+      - name: concurrency
+        default: "N/A"
+        description: "并发执行压测的Pod数"
+      - name: QPS
+        default: "N/A"
+        description: "单个压测Pod每秒执行list的QPS"
+      - name: total-duration
+        default: "N/A"
+        description: "压测持续时间"
+      - name: cluster-status
+        default: "N/A"
+        description: "集群状态"
+      - name: controll-plane-metrics
+        default: "N/A"
+        description: "控制面metrics"
+      - name: check-result
+        default: "N/A"
+        description: "前置检测结果"
+      - name: details-message
+        default: "N/A"
+        description: "详细信息"
+    script:
+      image: busybox:1.37.0
+      command: [sh]
+      source: |
+        cat <<EOF
+        ### 故障演练通知
+        **阶段**: {{inputs.parameters.stage}}
+        **集群ID**: {{inputs.parameters.cluster-id}}
+        **故障类型**: {{inputs.parameters.chaos-type}}
+        **并发数**: {{inputs.parameters.concurrency}}
+        **QPS**: {{inputs.parameters.QPS}}
+        **持续时间**: {{inputs.parameters.total-duration}}
+        **集群状态**: {{inputs.parameters.cluster-status}}
+        **控制面metrics**: {{inputs.parameters.controll-plane-metrics}}
+        **校验结果**: {{inputs.parameters.check-result}}
+        **详细信息**: {{inputs.parameters.details-message}}
+        **时间**: $(date +'%Y-%m-%d %H:%M:%S')
+        EOF
+
+  - name: notify
+    retryStrategy:
+      limit: "3"
+    inputs:
+      parameters:
+      - name: message
+        description: "The message to send to the webhook"
+      - name: webhook-url
+        description: "The webhook URL to send the message to"
+    http:
+      method: POST
+      url: "{{inputs.parameters.webhook-url}}"
+      body: "{{inputs.parameters.message}}"
+      successCondition: "response.statusCode == 200"
+      headers:
+      - name: Content-Type
+        value: "application/json"

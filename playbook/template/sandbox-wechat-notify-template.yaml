@@ -1,0 +1,326 @@
+---
+# 功能说明: 沙箱复用测试企微群通知模版
+# generate-sandbox-test-notify-message: 生成沙箱测试Markdown消息
+# generate-sandbox-test-message-then-notify: 生成消息并发送到企微群
+# notify: 发送Markdown消息到企微群
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: sandbox-wechat-notify-template
+  annotations:
+    description: "超级节点沙箱复用测试企业微信通知模板"
+    version: "1.0"
+spec:
+  entrypoint: notify
+  templates:
+  
+  # 生成消息并发送的组合模板
+  - name: generate-sandbox-test-message-then-notify
+    inputs:
+      parameters:
+      # 基础信息参数
+      - name: stage
+        description: "测试阶段 (开始/完成/失败)"
+      - name: cluster-id
+        description: "集群ID"
+      - name: test-node
+        description: "测试节点名称"
+        default: "unknown"
+      - name: pod-replicas
+        description: "Pod副本数"
+        default: "1"
+      
+      # 测试结果参数
+      - name: test-status
+        description: "测试状态 (SUCCESS/PARTIAL_FAILURE/FAILURE)"
+        default: "UNKNOWN"
+      - name: total-tests
+        description: "总测试次数"
+        default: "0"
+      - name: successful-tests
+        description: "成功测试次数"
+        default: "0"
+      - name: failed-tests
+        description: "失败测试次数"
+        default: "0"
+      - name: average-time
+        description: "平均创建时间(秒)"
+        default: "0"
+      
+      # 性能分析参数
+      - name: first-time
+        description: "首次创建时间(秒)"
+        default: "0"
+      - name: second-time
+        description: "沙箱复用时间(秒)"
+        default: "0"
+      - name: improvement
+        description: "性能提升(秒)"
+        default: "0"
+      - name: improvement-percent
+        description: "性能提升百分比"
+        default: "0"
+      
+      # 详细信息参数
+      - name: details-message
+        description: "详细信息或错误信息"
+        default: ""
+      
+      # 通知参数
+      - name: webhook-url
+        description: "企业微信webhook地址"
+    
+    steps:
+    - - name: generate-sandbox-test-notify-message
+        template: generate-sandbox-test-notify-message
+        arguments:
+          parameters:
+          - name: stage
+            value: "{{inputs.parameters.stage}}"
+          - name: cluster-id
+            value: "{{inputs.parameters.cluster-id}}"
+          - name: test-node
+            value: "{{inputs.parameters.test-node}}"
+          - name: pod-replicas
+            value: "{{inputs.parameters.pod-replicas}}"
+          - name: test-status
+            value: "{{inputs.parameters.test-status}}"
+          - name: total-tests
+            value: "{{inputs.parameters.total-tests}}"
+          - name: successful-tests
+            value: "{{inputs.parameters.successful-tests}}"
+          - name: failed-tests
+            value: "{{inputs.parameters.failed-tests}}"
+          - name: average-time
+            value: "{{inputs.parameters.average-time}}"
+          - name: first-time
+            value: "{{inputs.parameters.first-time}}"
+          - name: second-time
+            value: "{{inputs.parameters.second-time}}"
+          - name: improvement
+            value: "{{inputs.parameters.improvement}}"
+          - name: improvement-percent
+            value: "{{inputs.parameters.improvement-percent}}"
+          - name: details-message
+            value: "{{inputs.parameters.details-message}}"
+    
+    - - name: notify-sandbox-test-to-wechat
+        template: notify
+        arguments:
+          parameters:
+          - name: message
+            value: |
+              {
+                "msgtype": "markdown",
+                "markdown": {
+                  "content": "{{steps.generate-sandbox-test-notify-message.outputs.result}}"
+                }
+              }
+          - name: webhook-url
+            value: "{{inputs.parameters.webhook-url}}"
+
+  # 生成沙箱测试通知消息模板
+  - name: generate-sandbox-test-notify-message
+    inputs:
+      parameters:
+      - name: stage
+        description: "测试阶段"
+      - name: cluster-id
+        description: "集群ID"
+      - name: test-node
+        description: "测试节点名称"
+        default: "unknown"
+      - name: pod-replicas
+        description: "Pod副本数"
+        default: "1"
+      - name: test-status
+        description: "测试状态"
+        default: "UNKNOWN"
+      - name: total-tests
+        description: "总测试次数"
+        default: "0"
+      - name: successful-tests
+        description: "成功测试次数"
+        default: "0"
+      - name: failed-tests
+        description: "失败测试次数"
+        default: "0"
+      - name: average-time
+        description: "平均创建时间(秒)"
+        default: "0"
+      - name: first-time
+        description: "首次创建时间(秒)"
+        default: "0"
+      - name: second-time
+        description: "沙箱复用时间(秒)"
+        default: "0"
+      - name: improvement
+        description: "性能提升(秒)"
+        default: "0"
+      - name: improvement-percent
+        description: "性能提升百分比"
+        default: "0"
+      - name: details-message
+        description: "详细信息"
+        default: ""
+    
+    script:
+      image: busybox:1.37.0
+      command: [sh]
+      source: |
+        # 根据测试状态设置emoji和颜色
+        case "{{inputs.parameters.test-status}}" in
+          "SUCCESS")
+            STATUS_EMOJI="✅"
+            STATUS_TEXT="全部成功"
+            ;;
+          "PARTIAL_FAILURE")
+            STATUS_EMOJI="⚠️"
+            STATUS_TEXT="部分失败"
+            ;;
+          "FAILURE")
+            STATUS_EMOJI="❌"
+            STATUS_TEXT="测试失败"
+            ;;
+          *)
+            STATUS_EMOJI="📊"
+            STATUS_TEXT="{{inputs.parameters.stage}}"
+            ;;
+        esac
+        
+        # 根据阶段生成不同的消息内容
+        if [ "{{inputs.parameters.stage}}" = "开始" ]; then
+          cat <<EOF
+        ### ${STATUS_EMOJI} 超级节点沙箱复用测试开始
+        
+        **📋 基础信息**
+        - 集群ID: \`{{inputs.parameters.cluster-id}}\`
+        - 测试节点: \`{{inputs.parameters.test-node}}\`
+        - Pod副本数: **{{inputs.parameters.pod-replicas}}个**
+        - 开始时间: \`$(date '+%Y-%m-%d %H:%M:%S')\`
+        
+        **🚀 测试配置**
+        - 测试类型: 沙箱复用性能测试
+        - 测试策略: 基准测试 vs 沙箱复用测试
+        - 预计耗时: 约2-5分钟
+        
+        > 📊 测试进行中，请稍候...
+        EOF
+        else
+          # 生成性能分析部分
+          PERF_SECTION=""
+          if [ "{{inputs.parameters.improvement}}" != "0" ] && [ "{{inputs.parameters.improvement}}" != "" ]; then
+            if [ {{inputs.parameters.improvement}} -gt 0 ]; then
+              PERF_SECTION="
+        **⚡ 性能分析**
+        - 首次创建: {{inputs.parameters.first-time}}秒
+        - 沙箱复用: {{inputs.parameters.second-time}}秒
+        - 性能提升: **{{inputs.parameters.improvement}}秒** ({{inputs.parameters.improvement-percent}}%)
+        - 复用效果: $([ {{inputs.parameters.improvement}} -ge 3 ] && echo "显著" || ([ {{inputs.parameters.improvement}} -ge 1 ] && echo "明显" || echo "轻微"))"
+            fi
+          fi
+          
+          # 生成详细信息部分
+          DETAILS_SECTION=""
+          if [ "{{inputs.parameters.details-message}}" != "" ] && [ "{{inputs.parameters.details-message}}" != "N/A" ]; then
+            DETAILS_SECTION="
+        **📝 详细信息**
+        {{inputs.parameters.details-message}}"
+          fi
+          
+          cat <<EOF
+        ### ${STATUS_EMOJI} 超级节点沙箱复用测试完成
+        
+        **📋 基础信息**
+        - 集群ID: \`{{inputs.parameters.cluster-id}}\`
+        - 完成时间: \`$(date '+%Y-%m-%d %H:%M:%S')\`
+        - 测试节点: \`{{inputs.parameters.test-node}}\`
+        - Pod副本数: **{{inputs.parameters.pod-replicas}}个**
+        
+        **📊 测试结果**
+        - 状态: **${STATUS_TEXT}**
+        - 总测试: **{{inputs.parameters.total-tests}}次**
+        - 成功: **{{inputs.parameters.successful-tests}}次**
+        - 失败: **{{inputs.parameters.failed-tests}}次**
+        - 平均创建时间: \`{{inputs.parameters.average-time}}秒\`${PERF_SECTION}${DETAILS_SECTION}
+        
+        > 📈 详细分析数据请查看工作流日志
+        EOF
+        fi
+
+  # 通用通知发送模板
+  - name: notify
+    retryStrategy:
+      limit: "3"
+      retryPolicy: "Always"
+      backoff:
+        duration: "5s"
+        factor: 2
+        maxDuration: "1m"
+    inputs:
+      parameters:
+      - name: message
+        description: "要发送的消息内容(JSON格式)"
+      - name: webhook-url
+        description: "企业微信webhook地址"
+    
+    script:
+      image: curlimages/curl:8.5.0
+      command: [sh]
+      source: |
+        echo "📨 发送企业微信通知..."
+        echo "Webhook URL: {{inputs.parameters.webhook-url}}"
+        
+        # 发送通知
+        RESPONSE=$(curl -s -w "%{http_code}" -X POST "{{inputs.parameters.webhook-url}}" \
+          -H "Content-Type: application/json" \
+          -d '{{inputs.parameters.message}}')
+        
+        # 提取HTTP状态码和响应体
+        HTTP_CODE="${RESPONSE: -3}"
+        RESPONSE_BODY="${RESPONSE%???}"
+        
+        echo "HTTP状态码: $HTTP_CODE"
+        echo "响应内容: $RESPONSE_BODY"
+        
+        # 检查发送结果
+        if [ "$HTTP_CODE" = "200" ]; then
+          if echo "$RESPONSE_BODY" | grep -q '"errcode":0'; then
+            echo "✅ 企业微信通知发送成功"
+            exit 0
+          else
+            echo "⚠️ 企业微信API返回错误: $RESPONSE_BODY"
+            exit 1
+          fi
+        else
+          echo "❌ HTTP请求失败，状态码: $HTTP_CODE"
+          echo "响应内容: $RESPONSE_BODY"
+          exit 1
+        fi
+
+  # 简化的通知模板（只发送消息，不生成）
+  - name: simple-notify
+    inputs:
+      parameters:
+      - name: title
+        description: "通知标题"
+      - name: content
+        description: "通知内容"
+      - name: webhook-url
+        description: "企业微信webhook地址"
+    
+    steps:
+    - - name: send-simple-message
+        template: notify
+        arguments:
+          parameters:
+          - name: message
+            value: |
+              {
+                "msgtype": "markdown",
+                "markdown": {
+                  "content": "### {{inputs.parameters.title}}\n\n{{inputs.parameters.content}}\n\n> 发送时间: $(date '+%Y-%m-%d %H:%M:%S')"
+                }
+              }
+          - name: webhook-url
+            value: "{{inputs.parameters.webhook-url}}"

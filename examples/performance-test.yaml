@@ -1,0 +1,51 @@
+---
+# 性能测试示例
+# 使用更多资源和更多迭代次数进行深度性能测试
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: performance-sandbox-test-
+  namespace: tke-chaos-test
+  labels:
+    test-type: "deployment-sandbox-reuse"
+    example: "performance"
+spec:
+  serviceAccountName: tke-chaos
+  entrypoint: deployment-sandbox-test
+  arguments:
+    parameters:
+    # 基础配置
+    - name: cluster-id
+      value: "tke-cluster"
+    - name: webhook-url
+      value: ""  # 建议配置企业微信通知以获取详细结果
+    
+    # 测试配置 - 性能测试
+    - name: kubeconfig-secret-name
+      value: ""
+    - name: deployment-name-prefix
+      value: "performance-sandbox-test"
+    - name: replicas
+      value: "3"  # 多副本测试（支持任意数量）
+    - name: pod-image
+      value: "nginx:1.25-alpine"
+    - name: namespace
+      value: "tke-chaos-test"
+    - name: test-iterations
+      value: "1"  # 单次对比测试
+    - name: delay-between-tests
+      value: "20s"  # 按需求20秒销毁
+    
+    # 资源配置 - 高性能配置
+    - name: cpu-request
+      value: "200m"
+    - name: memory-request
+      value: "256Mi"
+    - name: cpu-limit
+      value: "500m"
+    - name: memory-limit
+      value: "512Mi"
+
+  workflowTemplateRef:
+    name: supernode-sandbox-deployment-template
+    clusterScope: true

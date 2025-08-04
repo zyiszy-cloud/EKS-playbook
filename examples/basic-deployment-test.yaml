@@ -1,0 +1,51 @@
+---
+# 基础Deployment沙箱复用测试示例
+# 使用默认配置进行简单的沙箱复用测试
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: basic-sandbox-test-
+  namespace: tke-chaos-test
+  labels:
+    test-type: "deployment-sandbox-reuse"
+    example: "basic"
+spec:
+  serviceAccountName: tke-chaos
+  entrypoint: deployment-sandbox-test
+  arguments:
+    parameters:
+    # 基础配置
+    - name: cluster-id
+      value: "tke-cluster"
+    - name: webhook-url
+      value: ""  # 可选：配置企业微信通知
+    
+    # 测试配置
+    - name: kubeconfig-secret-name
+      value: ""
+    - name: deployment-name-prefix
+      value: "basic-sandbox-test"
+    - name: replicas
+      value: "1"
+    - name: pod-image
+      value: "nginx:alpine"
+    - name: namespace
+      value: "tke-chaos-test"
+    - name: test-iterations
+      value: "1"
+    - name: delay-between-tests
+      value: "20s"
+    
+    # 资源配置 - 轻量级配置
+    - name: cpu-request
+      value: "50m"
+    - name: memory-request
+      value: "64Mi"
+    - name: cpu-limit
+      value: "100m"
+    - name: memory-limit
+      value: "128Mi"
+
+  workflowTemplateRef:
+    name: supernode-sandbox-deployment-template
+    clusterScope: true
