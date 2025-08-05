@@ -32,7 +32,7 @@ spec:
     - name: namespace
       value: "tke-chaos-test"
     - name: test-iterations
-      value: "1"  # 单次对比测试（基准 vs 沙箱复用）
+      value: "2"  # 两次测试：基准测试 + 沙箱复用测试
     - name: delay-between-tests
       value: "20s"  # 严格按照需求20秒后销毁
     

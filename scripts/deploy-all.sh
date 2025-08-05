@@ -16,7 +16,7 @@ NC='\033[0m'
 
 # 默认配置
 NAMESPACE="tke-chaos-test"
-DEFAULT_ITERATIONS=1
+DEFAULT_ITERATIONS=2
 DEFAULT_REPLICAS=1
 DEFAULT_IMAGE="nginx:alpine"
 DEFAULT_CPU_REQUEST="100m"
@@ -145,9 +145,10 @@ simple_config() {
     echo "========================================${NC}"
     echo ""
     
-    # Pod数量配置
-    echo -e "${BLUE}1. Pod数量配置${NC}"
-    echo "当前配置: $REPLICAS 个Pod副本"
+    # 测试配置说明
+    echo -e "${BLUE}1. 测试配置${NC}"
+    echo "沙箱复用测试需要2次迭代（基准测试 + 沙箱复用测试）"
+    echo "当前配置: $ITERATIONS 次迭代, $REPLICAS 个Pod副本"
     echo ""
     
     read -p "是否修改Pod数量? (y/N): " -n 1 -r
@@ -654,10 +655,14 @@ start_test() {
                 sed -i.bak "/- name: cluster-id/,/value:/ s/value: \".*\"/value: \"$CLUSTER_ID\"/" "$temp_workflow" 2>/dev/null || true
             fi
             
+            # 替换测试迭代次数（关键修复）
+            sed -i.bak "/- name: test-iterations/,/value:/ s/value: \"[0-9]*\"/value: \"$ITERATIONS\"/" "$temp_workflow" 2>/dev/null || true
+            
             # 验证替换结果
             echo "[DEBUG] 参数替换后的关键配置:"
             grep -A1 "name: replicas" "$temp_workflow" || echo "未找到replicas配置"
             grep -A1 "name: webhook-url" "$temp_workflow" || echo "未找到webhook-url配置"
+            grep -A1 "name: test-iterations" "$temp_workflow" || echo "未找到test-iterations配置"
             
             kubectl create -f "$temp_workflow"
             rm -f "$temp_workflow" "$temp_workflow.bak" 2>/dev/null || true

@@ -31,7 +31,7 @@ spec:
     - name: namespace
       value: "tke-chaos-test"
     - name: test-iterations
-      value: "1"
+      value: "2"
     - name: delay-between-tests
       value: "20s"
     
