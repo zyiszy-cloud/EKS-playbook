@@ -21,7 +21,6 @@
 - Kubernetes集群（推荐TKE）在集群中创建tke-chaos-test/tke-chaos-precheck-resource ConfigMap，该资源用于标识集群可执行演练测试
 - kubectl create ns tke-chaos-test && kubectl create -n tke-chaos-test configmap tke-chaos-precheck-resource --from-literal=empty=""
 - Argo Workflows已安装
-- 
 - kubectl命令行工具
 - 超级节点已配置
 
