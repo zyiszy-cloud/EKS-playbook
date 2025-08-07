@@ -98,7 +98,7 @@ clean_deployments() {
 clean_templates() {
     log_info "清理模板..."
     kubectl get clusterworkflowtemplate --no-headers 2>/dev/null | \
-        grep -E "(kubectl-cmd|supernode-sandbox-deployment)" | \
+        grep -E "(kubectl-cmd|supernode-sandbox-deployment|supernode-rolling-update|sandbox-wechat-notify)" | \
         awk '{print $1}' | \
         xargs -r kubectl delete clusterworkflowtemplate 2>/dev/null || true
     log_success "模板清理完成"
@@ -115,6 +115,11 @@ clean_rbac() {
 # 清理命名空间
 clean_namespace() {
     log_warning "清理整个命名空间..."
+    # 安全检查：确保不删除系统命名空间
+    if [[ "$NAMESPACE" =~ ^(default|kube-system|kube-public|kube-node-lease|argo)$ ]]; then
+        log_error "拒绝删除系统命名空间: $NAMESPACE"
+        return 1
+    fi
     kubectl delete namespace "$NAMESPACE" --grace-period=0 --force 2>/dev/null || true
     log_success "命名空间清理完成"
 }

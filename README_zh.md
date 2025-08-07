@@ -1,236 +1,209 @@
-# TKE Chaos Playbook
+# TKE Chaos Playbook 中文指南
 
-基于Argo Workflows的腾讯云TKE集群混沌工程演练平台，专注于超级节点Pod沙箱复用功能测试。
+基于Argo Workflows的腾讯云TKE超级节点沙箱复用测试平台。
 
-## 项目简介
+## 🎯 项目简介
 
-TKE Chaos Playbook是腾讯云TKE团队设计的混沌工程平台，用于在Kubernetes集群中进行各种故障注入和性能测试。本项目专门针对超级节点的Pod沙箱复用功能进行测试，验证Pod重建时沙箱复用的效果和性能提升。
+本项目是专门为腾讯云TKE超级节点设计的沙箱复用性能测试工具。通过精确的时间测量和智能的复用检测，帮助用户验证和优化超级节点的沙箱复用机制。
 
-## 核心功能
+## ✨ 主要特性
 
-- **超级节点沙箱复用测试**: 测试超级节点上Pod重建时沙箱复用功能的效果
-- **批量Pod创建测试**: 同时创建多个Pod，分析沙箱复用率和创建性能
-- **企业微信通知**: 支持测试结果通过企业微信群进行通知
-- **性能分析**: 自动分析Pod创建时间（沙箱初始化）和端到端时间，包含P50/P95/P99统计
-- **沙箱复用率统计**: 分析不同超级节点上的Pod分布和沙箱复用效果
-- **自动化测试**: 支持多批次、多Pod的自动化测试流程
+- **🚀 自动化测试**: 全自动的沙箱复用性能测试流程
+- **⏱️ 精确测量**: 毫秒级精度的时间测量
+- **📊 智能分析**: 自动分析沙箱复用效果
+- **💬 实时通知**: 企业微信群实时推送测试结果
+- **🔧 易于使用**: 一键部署，简单配置
 
-## 快速开始
+## 🚀 快速开始
 
-### 1. 一键部署
+### 环境要求
+
+- Kubernetes集群（推荐TKE）
+- Argo Workflows已安装
+- kubectl命令行工具
+- 超级节点已配置
+
+### 一键部署
 
 ```bash
 # 克隆项目
 git clone <repository-url>
 cd tke-chaos-playbook
 
-# 交互式部署（推荐）
-./scripts/deploy-all.sh
+# 交互式配置部署（推荐新手）
+./scripts/deploy-all.sh --interactive
 
-# 快速部署（使用默认配置）
+# 快速部署（默认配置）
 ./scripts/deploy-all.sh -q
 
-# 自定义测试迭代次数
-./scripts/deploy-all.sh -i 5
-
-# 完整自定义配置
-./scripts/deploy-all.sh -i 10 -c 'my-cluster' -w 'https://webhook-url'
+# 自定义配置部署
+./scripts/deploy-all.sh -i 2 -r 5 -w "YOUR_WEBHOOK_URL"
 ```
 
-#### 支持的命令行参数：
-- `-i, --iterations NUM`: 设置测试迭代次数 (1-20, 默认: 1)
-- `-w, --webhook URL`: 设置企业微信webhook地址
-- `-c, --cluster-id ID`: 设置集群ID (默认: tke-cluster)
-- `-q, --quick`: 快速模式，使用默认配置并立即启动测试
-- `--skip-test`: 只部署组件，不启动测试
-- `-h, --help`: 显示帮助信息
-
-脚本会自动完成以下操作：
-- 检查kubectl和集群连接
-- 创建必要的命名空间
-- 部署RBAC权限配置
-- 安装Argo Workflows（如果未安装）
-- 部署所有工作流模板
-- 创建前置检查资源
-- 验证部署状态
-- 可选择立即启动测试工作流
-
-### 2. 手动部署
+### 启动测试
 
 ```bash
-# 1. 创建命名空间
-kubectl create namespace tke-chaos-test
+# 基础测试
+kubectl apply -f examples/basic-deployment-test.yaml
 
-# 2. 部署RBAC权限
-kubectl apply -f playbook/rbac.yaml
+# 性能测试
+kubectl apply -f examples/performance-test.yaml
 
-# 3. 安装Argo Workflows (如果未安装)
-kubectl apply -f playbook/install-argo.yaml
+# 精确沙箱复用测试
+kubectl apply -f examples/sandbox-reuse-precise-test.yaml
 
-# 4. 部署模板
-kubectl apply -f playbook/template/kubectl-cmd-template.yaml
-kubectl apply -f playbook/template/supernode-sandbox-deployment-template.yaml
-
-# 5. 创建前置检查资源
-kubectl create -n tke-chaos-test configmap tke-chaos-precheck-resource --from-literal=empty=""
+# 滚动更新沙箱复用测试
+kubectl apply -f examples/rolling-update-test.yaml
 ```
 
-### 3. 运行测试
+### 查看结果
 
 ```bash
-# 运行超级节点沙箱复用测试（Deployment模式）
-kubectl apply -f playbook/workflow/supernode-sandbox-deployment-scenario.yaml
+# 监控测试状态
+kubectl get workflows -n tke-chaos-test -w
 
-# 查看工作流状态
-kubectl get workflow -n tke-chaos-test
-
-# 查看工作流日志
-kubectl logs -l workflows.argoproj.io/workflow -n tke-chaos-test -f
+# 查看详细日志
+kubectl logs -l workflows.argoproj.io/workflow -n tke-chaos-test
 ```
 
-## 配置说明
+## 📋 核心功能
 
-### 企业微信通知配置
+| 功能 | 描述 | 状态 |
+|---|---|---|
+| **Deployment测试** | 使用Deployment进行沙箱复用测试 | ✅ 推荐 |
+| **滚动更新测试** | 测试Pod滚动更新过程中的沙箱复用效果 | ✅ 新增 |
+| **精确时间测量** | 毫秒级精度的时间测量 | ✅ 已优化 |
+| **智能复用检测** | 自动检测沙箱复用情况 | ✅ 已修复 |
+| **企业微信通知** | 测试结果自动发送到微信群 | ✅ 支持 |
+| **多维度分析** | 全面的性能分析报告 | ✅ 完整 |
 
-如需启用企业微信通知，请在工作流文件中配置webhook地址：
+## 🛠️ 配置参数
 
-```yaml
-- name: webhook-url
-  value: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY"
-```
-
-### 测试参数配置
-
-可以在工作流文件中调整以下测试参数：
-
-- `test-iterations`: 测试迭代次数 (默认: 1)
-- `pod-image`: 测试Pod使用的镜像 (默认: nginx:alpine)
-- `pod-cpu-request/limit`: Pod CPU资源配置
-- `pod-memory-request/limit`: Pod内存资源配置
-- `wait-pod-ready-timeout`: 等待Pod就绪超时时间 (默认: 300s)
-- `pod-recreation-delay`: Pod重建间隔时间 (默认: 30s)
-
-## 项目结构
-
-```
-tke-chaos-playbook/
-├── scripts/                                # 脚本工具目录
-│   ├── deploy-all.sh                       # 一键部署脚本
-│   ├── cleanup.sh                          # 清理脚本
-│   ├── test-local-env.sh                   # 环境检查脚本
-│   └── test-curl-image.sh                  # 镜像测试脚本
-├── README.md                               # 项目说明文档
-├── README_zh.md                            # 中文说明文档
-├── USAGE.md                                # 使用指南
-├── USAGE_SIMPLE.md                         # 简化使用指南
-└── playbook/
-    ├── rbac.yaml                           # RBAC权限配置
-    ├── install-argo.yaml                   # Argo Workflows安装配置
-    ├── template/                           # 工作流模板目录
-    │   ├── kubectl-cmd-template.yaml       # kubectl命令执行模板
-    │   └── supernode-sandbox-deployment-template.yaml  # Deployment测试模板
-    └── workflow/                           # 工作流场景目录
-        └── supernode-sandbox-deployment-scenario.yaml  # Deployment测试场景
-```
-
-## 测试原理
-
-### 沙箱复用机制
-
-超级节点的沙箱复用功能通过以下机制提升Pod启动性能：
-
-1. **沙箱保留**: Pod删除后，沙箱环境可能被保留一段时间
-2. **资源匹配**: 新Pod如果资源规格匹配，可以复用已有沙箱
-3. **启动加速**: 复用沙箱可以跳过部分初始化步骤，加快启动速度
-
-### 测试方法
-
-1. **基准测试**: 首次创建Pod，记录启动时间作为基准
-2. **复用测试**: 删除Pod后立即重建，测试沙箱复用效果
-3. **性能对比**: 对比首次启动和后续启动的时间差异
-4. **统计分析**: 计算平均启动时间和性能提升百分比
-
-## 监控和调试
-
-### 查看工作流状态
+### 部署脚本参数
 
 ```bash
-# 查看所有工作流
-kubectl get workflows -n tke-chaos-test
-
-# 查看特定工作流详情
-kubectl describe workflow <workflow-name> -n tke-chaos-test
-
-# 实时监控工作流状态
-kubectl get workflow <workflow-name> -n tke-chaos-test -w
+./scripts/deploy-all.sh [选项]
+  -i, --iterations NUM    测试迭代次数 (1-20, 默认: 2)
+  -r, --replicas NUM      Pod副本数 (默认: 5)
+  -w, --webhook URL       企业微信webhook地址
+  -c, --cluster-id ID     集群ID (默认: tke-cluster)
+  --image IMAGE           Pod镜像 (默认: nginx:alpine)
+  --cpu-request CPU       CPU请求 (默认: 100m)
+  --memory-request MEM    内存请求 (默认: 128Mi)
+  --cpu-limit CPU         CPU限制 (默认: 200m)
+  --memory-limit MEM      内存限制 (默认: 256Mi)
+  --delay TIME            测试间隔 (默认: 30s)
+  -q, --quick             快速模式，跳过确认
+  --interactive           交互式配置模式
+  --skip-test             只部署组件，不启动测试
 ```
-
-### 查看日志
-
-```bash
-# 查看工作流日志
-kubectl logs -l workflows.argoproj.io/workflow=<workflow-name> -n tke-chaos-test -f
-
-# 查看特定步骤日志
-kubectl logs <pod-name> -n tke-chaos-test
-```
-
-### 访问Argo UI
-
-```bash
-# 端口转发
-kubectl port-forward svc/tke-chaos-argo-workflows-server -n tke-chaos-test 2746:2746
-
-# 访问UI
-open https://localhost:2746
-```
-
-## 故障排除
-
-### 常见问题
-
-1. **Pod启动失败**
-   - 检查超级节点是否可用：`kubectl get nodes -l "node.kubernetes.io/instance-type=eklet"`
-   - 验证镜像是否可以拉取
-   - 检查资源配额是否充足
-
-2. **工作流执行失败**
-   - 检查RBAC权限配置：`kubectl get serviceaccount tke-chaos -n tke-chaos-test`
-   - 验证模板是否正确部署：`kubectl get clusterworkflowtemplate`
-   - 查看工作流日志获取详细错误信息
-
-3. **企业微信通知失败**
-   - 验证webhook地址是否正确
-   - 检查网络连接是否正常
-   - 确认消息格式是否符合要求
-
-4. **LoadBalancer readiness gate问题**
-   - 项目已自动添加腾讯云相关注解禁用LoadBalancer功能
-   - 如仍有问题，检查Pod的annotations配置
 
 ### 清理资源
 
-使用交互式清理脚本（推荐）：
 ```bash
+# 快速清理
+./scripts/cleanup.sh quick
+
+# 完全清理
+./scripts/cleanup.sh full
+
+# 交互式清理
 ./scripts/cleanup.sh
 ```
 
-或手动清理：
-```bash
-# 删除工作流
-kubectl delete workflow <workflow-name> -n tke-chaos-test
+## 📊 测试结果解读
 
-# 删除所有测试资源
-kubectl delete namespace tke-chaos-test
+### 典型测试输出
 
-# 卸载Argo Workflows (可选)
-kubectl delete -f playbook/install-argo.yaml
+```
+📋 Pod创建时间（不含启动时间）:
+- 基准测试平均: 14.000秒
+- 沙箱复用平均: 13.400秒
+- 性能提升: 4.3%
+
+📊 沙箱复用效果分析:
+- 基准测试（首次创建）: 14.000秒
+- 沙箱复用测试: 13.400秒
+- 沙箱复用覆盖率: 60% (6/10个Pod)
+- 结论: 沙箱复用显著提升了Pod启动性能
 ```
 
-## 贡献指南
+### 关键指标说明
 
-欢迎提交Issue和Pull Request来改进项目。
+- **基准测试时间**: 首次创建沙箱的时间
+- **沙箱复用时间**: 复用现有沙箱的时间
+- **性能提升**: (基准时间-复用时间)/基准时间 × 100%
+- **复用覆盖率**: 成功复用沙箱的Pod占比
 
-## 许可证
+### 成功标准
 
-本项目采用MIT许可证，详见LICENSE文件。
+- ✅ 沙箱复用时间 < 基准测试时间
+- ✅ 性能提升 > 2%
+- ✅ 复用覆盖率 > 50%
+- ✅ 所有Pod成功启动
+
+## 🔧 故障排除
+
+### 常见问题
+
+1. **时间显示0.000秒**
+   - 原因：容器未启动或时区问题
+   - 解决：检查Pod状态，验证时区设置
+
+2. **沙箱复用率为0%**
+   - 原因：测试间隔太短或配置不一致
+   - 解决：增加测试间隔，检查Pod规格
+
+3. **测试超时**
+   - 原因：资源不足或网络问题
+   - 解决：检查集群资源，验证网络连接
+
+### 调试工具
+
+```bash
+# 系统诊断
+./scripts/diagnose.sh
+
+# 查看Pod状态
+kubectl get pods -n tke-chaos-test
+
+# 查看工作流日志
+kubectl logs -n argo <workflow-name>
+```
+
+## 📁 项目结构
+
+```
+tke-chaos-playbook/
+├── playbook/
+│   ├── template/                    # 工作流模板
+│   └── workflow/                    # 工作流定义
+├── examples/                        # 测试示例
+├── scripts/                         # 辅助脚本
+├── docs/                           # 文档
+└── README.md                       # 项目说明
+```
+
+## 🔗 核心文件
+
+- **部署脚本**: `scripts/deploy-all.sh` - 一键部署工具
+- **清理脚本**: `scripts/cleanup.sh` - 资源清理工具
+- **主测试模板**: `playbook/template/supernode-sandbox-deployment-template.yaml`
+- **kubectl模板**: `playbook/template/kubectl-cmd-template.yaml`
+- **微信通知模板**: `playbook/template/sandbox-wechat-notify-template.yaml`
+
+## 📖 详细文档
+
+- [使用指南](docs/USAGE.md) - 详细使用说明
+- [沙箱复用测试指南](docs/SANDBOX_REUSE_TEST_GUIDE.md) - 专业测试指南
+- [交互式部署指南](docs/INTERACTIVE_DEPLOYMENT_GUIDE.md) - 新手友好指南
+- [企业微信通知配置](docs/WECHAT_NOTIFICATION_SETUP.md) - 通知配置指南
+- [微信模板架构](docs/WECHAT_TEMPLATE_ARCHITECTURE.md) - 技术架构说明
+
+## 🤝 贡献
+
+欢迎提交Issue和Pull Request来改进项目！
+
+## 📄 许可证
+
+本项目采用MIT许可证。

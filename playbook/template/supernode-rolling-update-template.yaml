@@ -1,0 +1,911 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: supernode-rolling-update-template
+  annotations:
+    description: "超级节点Pod滚动更新沙箱复用测试模板 - 重新设计版本"
+    version: "3.0"
+    changelog: "重新设计测试逻辑：使用标准滚动更新策略，滚动更新完成后创建额外Pod测试沙箱复用效果"
+spec:
+  serviceAccountName: tke-chaos
+  entrypoint: rolling-update-sandbox-test
+  
+  arguments:
+    parameters:
+    # 基础配置
+    - name: cluster-id
+      value: "tke-cluster"
+    - name: webhook-url
+      value: ""
+    - name: kubeconfig-secret-name
+      value: ""
+    - name: namespace
+      value: "tke-chaos-test"
+    
+    # 测试配置
+    - name: deployment-name
+      value: "rolling-update-test"
+    - name: replicas
+      value: "3"
+    - name: initial-image
+      value: "nginx:1.20-alpine"
+    - name: updated-image
+      value: "nginx:1.21-alpine"
+    - name: update-iterations
+      value: "1"
+    - name: delay-between-updates
+      value: "30s"
+    
+    # 资源配置
+    - name: cpu-request
+      value: "100m"
+    - name: memory-request
+      value: "128Mi"
+    - name: cpu-limit
+      value: "200m"
+    - name: memory-limit
+      value: "256Mi"
+
+  templates:
+  # 主测试流程
+  - name: rolling-update-sandbox-test
+    inputs:
+      parameters:
+      - name: cluster-id
+      - name: kubeconfig-secret-name
+      - name: namespace
+      - name: deployment-name
+      - name: replicas
+      - name: initial-image
+      - name: updated-image
+      - name: update-iterations
+      - name: delay-between-updates
+      - name: cpu-request
+      - name: memory-request
+      - name: cpu-limit
+      - name: memory-limit
+      - name: webhook-url
+    steps:
+    # 第一步：验证超级节点
+    - - name: verify-supernodes
+        template: verify-supernodes
+        arguments:
+          parameters:
+          - name: cluster-id
+            value: "{{inputs.parameters.cluster-id}}"
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+          - name: namespace
+            value: "{{inputs.parameters.namespace}}"
+    
+    # 第二步：运行滚动更新测试
+    - - name: run-rolling-update-test
+        template: run-rolling-update-test
+        arguments:
+          parameters:
+          - name: cluster-id
+            value: "{{inputs.parameters.cluster-id}}"
+          - name: webhook-url
+            value: "{{inputs.parameters.webhook-url}}"
+          - name: kubeconfig-secret-name
+            value: "{{inputs.parameters.kubeconfig-secret-name}}"
+          - name: namespace
+            value: "{{inputs.parameters.namespace}}"
+          - name: deployment-name
+            value: "{{inputs.parameters.deployment-name}}"
+          - name: replicas
+            value: "{{inputs.parameters.replicas}}"
+          - name: initial-image
+            value: "{{inputs.parameters.initial-image}}"
+          - name: updated-image
+            value: "{{inputs.parameters.updated-image}}"
+          - name: update-iterations
+            value: "{{inputs.parameters.update-iterations}}"
+          - name: delay-between-updates
+            value: "{{inputs.parameters.delay-between-updates}}"
+          - name: cpu-request
+            value: "{{inputs.parameters.cpu-request}}"
+          - name: memory-request
+            value: "{{inputs.parameters.memory-request}}"
+          - name: cpu-limit
+            value: "{{inputs.parameters.cpu-limit}}"
+          - name: memory-limit
+            value: "{{inputs.parameters.memory-limit}}"
+
+  # 验证超级节点模板
+  - name: verify-supernodes
+    inputs:
+      parameters:
+      - name: cluster-id
+      - name: kubeconfig-secret-name
+      - name: namespace
+    script:
+      image: bitnami/kubectl:1.32.4
+      command: [bash]
+      source: |
+        echo "🔍 验证超级节点状态..."
+        
+        # 获取超级节点信息
+        SUPERNODES=$(kubectl get nodes -l node.kubernetes.io/instance-type=eklet --no-headers 2>/dev/null | awk '{print $1}' | head -10)
+        
+        if [ -z "$SUPERNODES" ]; then
+          echo "❌ 未发现超级节点"
+          exit 1
+        fi
+        
+        echo "✅ 发现超级节点:"
+        for node in $SUPERNODES; do
+          echo "- $node"
+          # 检查节点状态
+          STATUS=$(kubectl get node $node --no-headers 2>/dev/null | awk '{print $2}')
+          if [ "$STATUS" = "Ready" ]; then
+            echo "✅ $node 状态正常"
+          else
+            echo "⚠️ $node 状态异常: $STATUS"
+          fi
+        done
+        
+        echo "success" > /tmp/result
+    outputs:
+      parameters:
+      - name: result
+        valueFrom:
+          path: /tmp/result
+
+  # 滚动更新测试模板
+  - name: run-rolling-update-test
+    inputs:
+      parameters:
+      - name: cluster-id
+      - name: webhook-url
+      - name: kubeconfig-secret-name
+      - name: namespace
+      - name: deployment-name
+      - name: replicas
+      - name: initial-image
+      - name: updated-image
+      - name: update-iterations
+      - name: delay-between-updates
+      - name: cpu-request
+      - name: memory-request
+      - name: cpu-limit
+      - name: memory-limit
+    script:
+      image: alpine/k8s:1.28.4
+      command: [bash]
+      source: |
+        echo "🔄 超级节点Pod滚动更新沙箱复用测试"
+        echo "========================================"
+        
+        # 测试参数初始化
+        CLUSTER_ID="{{inputs.parameters.cluster-id}}"
+        WEBHOOK_URL="{{inputs.parameters.webhook-url}}"
+        NAMESPACE="{{inputs.parameters.namespace}}"
+        DEPLOYMENT_NAME="{{inputs.parameters.deployment-name}}"
+        REPLICAS={{inputs.parameters.replicas}}
+        INITIAL_IMAGE="{{inputs.parameters.initial-image}}"
+        UPDATED_IMAGE="{{inputs.parameters.updated-image}}"
+        UPDATE_ITERATIONS="{{inputs.parameters.update-iterations}}"
+        DELAY="{{inputs.parameters.delay-between-updates}}"
+        CPU_REQUEST="{{inputs.parameters.cpu-request}}"
+        MEMORY_REQUEST="{{inputs.parameters.memory-request}}"
+        CPU_LIMIT="{{inputs.parameters.cpu-limit}}"
+        MEMORY_LIMIT="{{inputs.parameters.memory-limit}}"
+        
+        # 确保必要的工具可用
+        if ! command -v curl >/dev/null 2>&1; then
+          echo "🔧 安装curl..."
+          apk add --no-cache curl 2>/dev/null || echo "⚠️ 无法安装curl"
+        fi
+        
+        echo "🔍 测试参数:"
+        echo "  集群ID: $CLUSTER_ID"
+        echo "  命名空间: $NAMESPACE"
+        echo "  Deployment名称: $DEPLOYMENT_NAME"
+        echo "  Pod副本数: $REPLICAS"
+        echo "  初始镜像: $INITIAL_IMAGE"
+        echo "  更新镜像: $UPDATED_IMAGE"
+        echo "  更新迭代: $UPDATE_ITERATIONS"
+        echo "  更新间隔: $DELAY"
+        echo ""
+        
+        # 获取超级节点信息
+        echo "🔍 获取超级节点信息..."
+        SUPERNODES=$(kubectl get nodes -l node.kubernetes.io/instance-type=eklet --no-headers 2>/dev/null | awk '{print $1}' | head -1)
+        
+        if [ -z "$SUPERNODES" ]; then
+          echo "❌ 未发现超级节点"
+          exit 1
+        fi
+        
+        node_name=$(echo $SUPERNODES | head -1)
+        echo "🎯 选择测试节点: $node_name"   
+     
+        # 初始化统计变量
+        UPDATE_TIMES=""
+        ALL_NEW_POD_TIMES=""        # 存储所有滚动更新新Pod的沙箱时间（基准测试）
+        ALL_REUSE_TEST_TIMES=""     # 存储所有沙箱复用测试Pod的沙箱时间
+        SANDBOX_REUSE_COUNT=0
+        TOTAL_UPDATES=0
+        
+        echo "========================================"
+        echo "🚀 开始滚动更新沙箱复用测试"
+        echo "========================================"
+        
+        # 第一步：创建初始Deployment
+        echo "📝 创建初始Deployment..."
+        kubectl apply -f - <<INITIAL_DEPLOY_EOF
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: $DEPLOYMENT_NAME
+          namespace: $NAMESPACE
+          labels:
+            app: rolling-update-test
+            cluster-id: "$CLUSTER_ID"
+            test-type: "rolling-update"
+          annotations:
+            deployment.kubernetes.io/revision: "1"
+            description: "超级节点滚动更新沙箱复用测试"
+        spec:
+          replicas: $REPLICAS
+          strategy:
+            type: RollingUpdate
+            rollingUpdate:
+              maxUnavailable: 25%
+              maxSurge: 25%
+          selector:
+            matchLabels:
+              app: rolling-update-test
+          template:
+            metadata:
+              labels:
+                app: rolling-update-test
+                cluster-id: "$CLUSTER_ID"
+                test-type: "rolling-update"
+            spec:
+              nodeName: $node_name
+              nodeSelector:
+                node.kubernetes.io/instance-type: eklet
+              tolerations:
+              - operator: Exists
+                effect: NoSchedule
+              containers:
+              - name: test-container
+                image: $INITIAL_IMAGE
+                imagePullPolicy: IfNotPresent
+                resources:
+                  requests:
+                    cpu: $CPU_REQUEST
+                    memory: $MEMORY_REQUEST
+                  limits:
+                    cpu: $CPU_LIMIT
+                    memory: $MEMORY_LIMIT
+                command: ["/bin/sh"]
+                args: ["-c", "echo 'Initial deployment started' && sleep 300"]
+                readinessProbe:
+                  exec:
+                    command: ["/bin/sh", "-c", "echo ready"]
+                  initialDelaySeconds: 1
+                  periodSeconds: 1
+                livenessProbe:
+                  exec:
+                    command: ["/bin/sh", "-c", "echo alive"]
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+              restartPolicy: Always
+        INITIAL_DEPLOY_EOF
+        
+        if [ $? -ne 0 ]; then
+          echo "❌ 初始Deployment创建失败"
+          exit 1
+        fi
+        
+        # 等待初始Deployment就绪
+        echo "⏳ 等待初始Deployment就绪..."
+        kubectl rollout status deployment/$DEPLOYMENT_NAME -n $NAMESPACE --timeout=300s
+        
+        if [ $? -ne 0 ]; then
+          echo "❌ 初始Deployment未能就绪"
+          exit 1
+        fi
+        
+        echo "✅ 初始Deployment已就绪" 
+       
+        # 执行滚动更新测试
+        # 使用标准滚动更新策略（先创建新Pod，再删除旧Pod）
+        for i in $(seq 1 $UPDATE_ITERATIONS); do
+          echo ""
+          echo "========================================"
+          echo "第${i}次滚动更新测试"
+          echo "========================================"
+          
+          # 确定当前和目标镜像
+          if [ $((i % 2)) -eq 1 ]; then
+            CURRENT_IMAGE="$INITIAL_IMAGE"
+            TARGET_IMAGE="$UPDATED_IMAGE"
+          else
+            CURRENT_IMAGE="$UPDATED_IMAGE"
+            TARGET_IMAGE="$INITIAL_IMAGE"
+          fi
+          
+          echo "🔄 滚动更新: $CURRENT_IMAGE -> $TARGET_IMAGE"
+          
+          # 记录更新开始时间
+          UPDATE_START_TIME=$(date +%s)
+          UPDATE_START_TIMESTAMP=$(date -Iseconds)
+          
+          echo "🔍 更新开始时间: $UPDATE_START_TIMESTAMP"
+          
+          # 执行滚动更新
+          kubectl patch deployment $DEPLOYMENT_NAME -n $NAMESPACE -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"test-container\",\"image\":\"$TARGET_IMAGE\"}]}}}}"
+          
+          if [ $? -ne 0 ]; then
+            echo "❌ 滚动更新命令执行失败"
+            continue
+          fi
+          
+          echo "✅ 滚动更新命令已执行"
+          
+          # 等待滚动更新完成
+          echo "⏳ 等待滚动更新完成..."
+          kubectl rollout status deployment/$DEPLOYMENT_NAME -n $NAMESPACE --timeout=300s
+          
+          if [ $? -ne 0 ]; then
+            echo "❌ 滚动更新未能完成"
+            continue
+          fi
+          
+          # 记录更新完成时间
+          UPDATE_END_TIME=$(date +%s)
+          UPDATE_DURATION=$((UPDATE_END_TIME - UPDATE_START_TIME))
+          
+          echo "✅ 滚动更新完成，耗时: ${UPDATE_DURATION}秒"
+          
+          # 🎯 分析滚动更新后的新Pod创建时间（基准测试）
+          echo "📊 分析滚动更新后的新Pod创建时间..."
+          sleep 3
+          
+          # 获取滚动更新后的Pod信息
+          NEW_PODS=$(kubectl get pods -n $NAMESPACE -l app=rolling-update-test --no-headers -o custom-columns=NAME:.metadata.name,CREATED:.metadata.creationTimestamp)
+          
+          echo "📋 滚动更新后的Pod信息:"
+          echo "$NEW_PODS"
+          
+          # 分析新Pod的沙箱初始化时间（作为基准）
+          CURRENT_NEW_POD_TIMES=""
+          NEW_POD_COUNT=0
+          
+          while IFS= read -r pod_line; do
+            if [ -z "$pod_line" ]; then
+              continue
+            fi
+            
+            POD_NAME=$(echo "$pod_line" | awk '{print $1}')
+            POD_CREATE_TIME=$(echo "$pod_line" | awk '{print $2}')
+            
+            if [ -z "$POD_NAME" ] || [ -z "$POD_CREATE_TIME" ]; then
+              continue
+            fi
+            
+            NEW_POD_COUNT=$((NEW_POD_COUNT + 1))
+            
+            echo "  📊 分析新Pod $POD_NAME..."
+            
+            # 获取容器启动时间
+            CONTAINER_START_TIME=$(kubectl get pod $POD_NAME -n $NAMESPACE -o jsonpath='{.status.containerStatuses[0].state.running.startedAt}' 2>/dev/null)
+            
+            if [ -n "$POD_CREATE_TIME" ] && [ -n "$CONTAINER_START_TIME" ]; then
+              # 计算沙箱初始化时间
+              SANDBOX_INIT_DURATION=$(python3 -c "
+        import datetime
+        try:
+            start = datetime.datetime.fromisoformat('$POD_CREATE_TIME'.replace('Z', '+00:00'))
+            end = datetime.datetime.fromisoformat('$CONTAINER_START_TIME'.replace('Z', '+00:00'))
+            duration = (end - start).total_seconds()
+            if duration < 0: duration = 0
+            print(f'{duration:.3f}')
+        except Exception as e:
+            print('0.000')
+        " 2>/dev/null || echo "0.000")
+              
+              echo "    🔍 新Pod沙箱初始化时间: ${SANDBOX_INIT_DURATION}秒"
+              
+              # 累加时间数据
+              if [ -z "$CURRENT_NEW_POD_TIMES" ]; then
+                CURRENT_NEW_POD_TIMES="$SANDBOX_INIT_DURATION"
+              else
+                CURRENT_NEW_POD_TIMES="$CURRENT_NEW_POD_TIMES $SANDBOX_INIT_DURATION"
+              fi
+            else
+              echo "    ⚠️ 无法获取新Pod完整时间信息"
+              SANDBOX_INIT_DURATION="0.000"
+              if [ -z "$CURRENT_NEW_POD_TIMES" ]; then
+                CURRENT_NEW_POD_TIMES="$SANDBOX_INIT_DURATION"
+              else
+                CURRENT_NEW_POD_TIMES="$CURRENT_NEW_POD_TIMES $SANDBOX_INIT_DURATION"
+              fi
+            fi
+          done <<< "$NEW_PODS"
+          
+          echo "  🔍 当前滚动更新新Pod时间: '$CURRENT_NEW_POD_TIMES'"
+          
+          # 🎯 沙箱复用测试：创建使用旧配置的Pod来测试沙箱复用
+          echo ""
+          echo "📊 开始沙箱复用测试..."
+          echo "🔍 创建使用旧配置的Pod来测试沙箱复用效果..."
+          
+          # 等待一段时间确保滚动更新完全稳定
+          sleep 5
+          
+          # 创建临时Deployment使用旧配置（用于测试沙箱复用）
+          REUSE_TEST_NAME="${DEPLOYMENT_NAME}-reuse-test-${i}"
+          echo "📝 创建沙箱复用测试Deployment: $REUSE_TEST_NAME"
+          
+          kubectl apply -f - <<REUSE_TEST_EOF
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: $REUSE_TEST_NAME
+          namespace: $NAMESPACE
+          labels:
+            app: rolling-update-reuse-test
+            cluster-id: "$CLUSTER_ID"
+            test-type: "sandbox-reuse"
+            iteration: "$i"
+        spec:
+          replicas: $REPLICAS
+          selector:
+            matchLabels:
+              app: rolling-update-reuse-test
+              iteration: "$i"
+          template:
+            metadata:
+              labels:
+                app: rolling-update-reuse-test
+                cluster-id: "$CLUSTER_ID"
+                test-type: "sandbox-reuse"
+                iteration: "$i"
+            spec:
+              nodeName: $node_name
+              nodeSelector:
+                node.kubernetes.io/instance-type: eklet
+              tolerations:
+              - operator: Exists
+                effect: NoSchedule
+              containers:
+              - name: reuse-test-container
+                image: $CURRENT_IMAGE  # 使用旧配置镜像
+                imagePullPolicy: IfNotPresent
+                resources:
+                  requests:
+                    cpu: $CPU_REQUEST
+                    memory: $MEMORY_REQUEST
+                  limits:
+                    cpu: $CPU_LIMIT
+                    memory: $MEMORY_LIMIT
+                command: ["/bin/sh"]
+                args: ["-c", "echo 'Sandbox reuse test started' && sleep 300"]
+        REUSE_TEST_EOF
+          
+          if [ $? -ne 0 ]; then
+            echo "❌ 沙箱复用测试Deployment创建失败"
+            continue
+          fi
+          
+          # 等待沙箱复用测试Pod创建完成
+          echo "⏳ 等待沙箱复用测试Pod创建完成..."
+          kubectl rollout status deployment/$REUSE_TEST_NAME -n $NAMESPACE --timeout=300s
+          
+          if [ $? -ne 0 ]; then
+            echo "❌ 沙箱复用测试Pod未能创建完成"
+            # 清理失败的Deployment
+            kubectl delete deployment $REUSE_TEST_NAME -n $NAMESPACE --ignore-not-found=true
+            continue
+          fi
+          
+          # 等待Pod稳定
+          sleep 3
+          
+          # 获取沙箱复用测试Pod信息
+          REUSE_TEST_PODS=$(kubectl get pods -n $NAMESPACE -l app=rolling-update-reuse-test,iteration=$i --no-headers -o custom-columns=NAME:.metadata.name,CREATED:.metadata.creationTimestamp)
+          
+          echo "📋 沙箱复用测试Pod信息:"
+          echo "$REUSE_TEST_PODS"
+          
+          # 检查是否获取到Pod信息
+          if [ -z "$REUSE_TEST_PODS" ]; then
+            echo "  ❌ 未获取到沙箱复用测试Pod信息！"
+            CURRENT_REUSE_TEST_TIMES="0.000"
+          fi
+          
+          # 分析沙箱复用测试Pod的创建时间
+          CURRENT_REUSE_TEST_TIMES=""
+          REUSED_PODS_COUNT=0
+          TOTAL_REUSE_TEST_PODS=0
+          
+          while IFS= read -r pod_line; do
+            if [ -z "$pod_line" ]; then
+              continue
+            fi
+            
+            POD_NAME=$(echo "$pod_line" | awk '{print $1}')
+            POD_CREATE_TIME=$(echo "$pod_line" | awk '{print $2}')
+            
+            if [ -z "$POD_NAME" ] || [ -z "$POD_CREATE_TIME" ]; then
+              continue
+            fi
+            
+            TOTAL_REUSE_TEST_PODS=$((TOTAL_REUSE_TEST_PODS + 1))
+            
+            echo "  📊 分析沙箱复用测试Pod $POD_NAME..."
+            
+            # 获取Pod的详细时间信息
+            CONTAINER_START_TIME=$(kubectl get pod $POD_NAME -n $NAMESPACE -o jsonpath='{.status.containerStatuses[0].state.running.startedAt}' 2>/dev/null)
+            
+            echo "    🔍 Pod创建时间: '$POD_CREATE_TIME'"
+            echo "    🔍 容器启动时间: '$CONTAINER_START_TIME'"
+            
+            if [ -n "$POD_CREATE_TIME" ] && [ -n "$CONTAINER_START_TIME" ]; then
+              # 计算沙箱初始化时间
+              SANDBOX_INIT_DURATION=$(python3 -c "
+        import datetime
+        try:
+            start = datetime.datetime.fromisoformat('$POD_CREATE_TIME'.replace('Z', '+00:00'))
+            end = datetime.datetime.fromisoformat('$CONTAINER_START_TIME'.replace('Z', '+00:00'))
+            duration = (end - start).total_seconds()
+            if duration < 0: duration = 0
+            print(f'{duration:.3f}')
+        except Exception as e:
+            print('0.000')
+        " 2>/dev/null || echo "0.000")
+              
+              echo "    🔍 沙箱复用测试Pod沙箱初始化时间: ${SANDBOX_INIT_DURATION}秒"
+              
+              # 判断是否复用了沙箱（沙箱复用阈值：20秒）
+              REUSE_CHECK=$(python3 -c "print(float('$SANDBOX_INIT_DURATION') < 20.0)" 2>/dev/null || echo "False")
+              
+              if [ "$REUSE_CHECK" = "True" ]; then
+                REUSED_PODS_COUNT=$((REUSED_PODS_COUNT + 1))
+                echo "    🎯 检测到沙箱复用"
+              else
+                echo "    🔧 新建沙箱"
+              fi
+              
+              # 累加时间数据
+              if [ -z "$CURRENT_REUSE_TEST_TIMES" ]; then
+                CURRENT_REUSE_TEST_TIMES="$SANDBOX_INIT_DURATION"
+              else
+                CURRENT_REUSE_TEST_TIMES="$CURRENT_REUSE_TEST_TIMES $SANDBOX_INIT_DURATION"
+              fi
+            else
+              echo "    ⚠️ 无法获取完整时间信息"
+              echo "    🔍 Pod创建时间为空: $([ -z "$POD_CREATE_TIME" ] && echo "是" || echo "否")"
+              echo "    🔍 容器启动时间为空: $([ -z "$CONTAINER_START_TIME" ] && echo "是" || echo "否")"
+              # 对于无法获取时间的Pod，使用默认值避免计算错误
+              SANDBOX_INIT_DURATION="0.000"
+              
+              # 将默认值也添加到时间数据中
+              if [ -z "$CURRENT_REUSE_TEST_TIMES" ]; then
+                CURRENT_REUSE_TEST_TIMES="$SANDBOX_INIT_DURATION"
+              else
+                CURRENT_REUSE_TEST_TIMES="$CURRENT_REUSE_TEST_TIMES $SANDBOX_INIT_DURATION"
+              fi
+            fi
+          done <<< "$REUSE_TEST_PODS"   
+       
+          # 计算当前更新的统计数据
+          if [ -n "$CURRENT_NEW_POD_TIMES" ]; then
+            NEW_POD_AVG_TIME=$(echo "$CURRENT_NEW_POD_TIMES" | awk '{
+              sum = 0; count = NF
+              for(i=1; i<=NF; i++) sum += $i
+              if(count > 0) printf "%.3f", sum/count; else print "0.000"
+            }')
+          else
+            NEW_POD_AVG_TIME="0.000"
+          fi
+          
+          if [ -n "$CURRENT_REUSE_TEST_TIMES" ]; then
+            REUSE_TEST_AVG_TIME=$(echo "$CURRENT_REUSE_TEST_TIMES" | awk '{
+              sum = 0; count = NF
+              for(i=1; i<=NF; i++) sum += $i
+              if(count > 0) printf "%.3f", sum/count; else print "0.000"
+            }')
+          else
+            REUSE_TEST_AVG_TIME="0.000"
+          fi
+          
+          # 计算沙箱复用率
+          if [ $TOTAL_REUSE_TEST_PODS -gt 0 ]; then
+            REUSE_RATE=$(python3 -c "print(f'{float($REUSED_PODS_COUNT) / float($TOTAL_REUSE_TEST_PODS) * 100:.1f}')" 2>/dev/null || echo "0.0")
+          else
+            REUSE_RATE="0.0"
+          fi
+          
+          echo "📊 第${i}次更新结果:"
+          echo "  滚动更新耗时: ${UPDATE_DURATION}秒"
+          echo "  滚动更新新Pod平均沙箱时间: ${NEW_POD_AVG_TIME}秒 (基准测试)"
+          echo "  沙箱复用测试Pod平均沙箱时间: ${REUSE_TEST_AVG_TIME}秒 (沙箱复用测试)"
+          echo "  沙箱复用率: ${REUSE_RATE}% (${REUSED_PODS_COUNT}/${TOTAL_REUSE_TEST_PODS}个Pod)"
+          
+          # 清理沙箱复用测试Deployment
+          echo "🧹 清理沙箱复用测试Deployment..."
+          kubectl delete deployment $REUSE_TEST_NAME -n $NAMESPACE --ignore-not-found=true
+          
+          # 等待Pod清理完成
+          echo "⏳ 等待沙箱复用测试Pod清理完成..."
+          sleep 10
+          
+          # 累加全局统计
+          if [ -z "$UPDATE_TIMES" ]; then
+            UPDATE_TIMES="$UPDATE_DURATION"
+          else
+            UPDATE_TIMES="$UPDATE_TIMES $UPDATE_DURATION"
+          fi
+          
+          # 收集每次更新的数据（基准测试 vs 沙箱复用测试对比）
+          echo "  🔍 滚动更新新Pod时间: '$CURRENT_NEW_POD_TIMES'"
+          echo "  🔍 沙箱复用测试Pod时间: '$CURRENT_REUSE_TEST_TIMES'"
+          
+          # 确保数据不为空
+          if [ -z "$CURRENT_NEW_POD_TIMES" ]; then
+            echo "  ⚠️ 滚动更新新Pod时间为空，使用默认值"
+            CURRENT_NEW_POD_TIMES="0.000"
+          fi
+          
+          if [ -z "$CURRENT_REUSE_TEST_TIMES" ]; then
+            echo "  ⚠️ 沙箱复用测试Pod时间为空，使用默认值"
+            CURRENT_REUSE_TEST_TIMES="0.000"
+          fi
+          
+          # 收集基准测试数据（滚动更新新Pod）
+          if [ -z "$ALL_NEW_POD_TIMES" ]; then
+            ALL_NEW_POD_TIMES="$CURRENT_NEW_POD_TIMES"
+          else
+            ALL_NEW_POD_TIMES="$ALL_NEW_POD_TIMES"$'\n'"$CURRENT_NEW_POD_TIMES"
+          fi
+          
+          # 收集沙箱复用测试数据
+          if [ -z "$ALL_REUSE_TEST_TIMES" ]; then
+            ALL_REUSE_TEST_TIMES="$CURRENT_REUSE_TEST_TIMES"
+          else
+            ALL_REUSE_TEST_TIMES="$ALL_REUSE_TEST_TIMES"$'\n'"$CURRENT_REUSE_TEST_TIMES"
+          fi
+          
+          echo "  🔍 累计基准测试数据: '$ALL_NEW_POD_TIMES'"
+          echo "  🔍 累计沙箱复用测试数据: '$ALL_REUSE_TEST_TIMES'"
+          
+          SANDBOX_REUSE_COUNT=$((SANDBOX_REUSE_COUNT + REUSED_PODS_COUNT))
+          TOTAL_UPDATES=$((TOTAL_UPDATES + TOTAL_REUSE_TEST_PODS))
+          
+          # 等待下次更新
+          if [ $i -lt $UPDATE_ITERATIONS ]; then
+            echo "⏳ 等待 $DELAY 后进行下次更新..."
+            sleep_seconds=$(echo $DELAY | sed 's/s$//')
+            sleep $sleep_seconds
+          fi
+        done
+        
+        echo ""
+        echo "========================================"
+        echo "📊 滚动更新沙箱复用测试总结"
+        echo "========================================"
+        echo "📋 测试配置:"
+        echo "- Pod副本数: $REPLICAS个"
+        echo "- 更新次数: $UPDATE_ITERATIONS次"
+        echo "- 总Pod创建次数: ${TOTAL_UPDATES}次"
+        echo ""
+        echo "📝 测试说明:"
+        echo "- 滚动更新：使用标准策略（先创建新Pod，再删除旧Pod）"
+        echo "- 沙箱复用测试：滚动更新完成后，创建使用旧配置的Pod测试沙箱复用"
+        echo "- 对比分析：滚动更新新Pod时间 vs 沙箱复用测试Pod时间"
+        echo "- 复用判断标准：沙箱初始化时间 < 20.0秒"
+        echo ""
+        
+        # 计算总体统计
+        if [ -n "$UPDATE_TIMES" ]; then
+          UPDATE_STATS=$(echo "$UPDATE_TIMES" | awk '{
+            sum = 0; min = $1; max = $1; count = NF
+            for(i=1; i<=NF; i++) {
+              sum += $i
+              if($i < min) min = $i
+              if($i > max) max = $i
+            }
+            avg = sum / count
+            printf "%.1f %.1f %.1f", avg, min, max
+          }')
+          
+          AVG_UPDATE_TIME=$(echo "$UPDATE_STATS" | awk '{print $1}')
+          MIN_UPDATE_TIME=$(echo "$UPDATE_STATS" | awk '{print $2}')
+          MAX_UPDATE_TIME=$(echo "$UPDATE_STATS" | awk '{print $3}')
+        else
+          AVG_UPDATE_TIME="0.0"
+          MIN_UPDATE_TIME="0.0"
+          MAX_UPDATE_TIME="0.0"
+        fi
+        
+        # 计算总体沙箱复用率
+        if [ $TOTAL_UPDATES -gt 0 ]; then
+          TOTAL_REUSE_RATE=$(python3 -c "print(f'{float($SANDBOX_REUSE_COUNT) / float($TOTAL_UPDATES) * 100:.1f}')" 2>/dev/null || echo "0.0")
+        else
+          TOTAL_REUSE_RATE="0.0"
+        fi
+        
+        echo "🔄 滚动更新性能分析:"
+        echo "- 平均更新时间: ${AVG_UPDATE_TIME}秒"
+        echo "- 最快更新时间: ${MIN_UPDATE_TIME}秒"
+        echo "- 最慢更新时间: ${MAX_UPDATE_TIME}秒"
+        echo "- 总更新次数: ${UPDATE_ITERATIONS}次"
+        echo ""
+        echo "📊 沙箱复用效果分析:"
+        
+        # 计算基准测试和沙箱复用测试的对比分析
+        if [ -n "$ALL_NEW_POD_TIMES" ] && [ -n "$ALL_REUSE_TEST_TIMES" ]; then
+          echo "  🔍 调试信息:"
+          echo "    基准测试数据（滚动更新新Pod）:"
+          echo "$ALL_NEW_POD_TIMES" | sed 's/^/      /'
+          echo "    沙箱复用测试数据:"
+          echo "$ALL_REUSE_TEST_TIMES" | sed 's/^/      /'
+          
+          # 计算基准测试平均时间（滚动更新新Pod）
+          ALL_NEW_TIMES=$(echo "$ALL_NEW_POD_TIMES" | tr '\n' ' ')
+          BASELINE_AVG=$(echo "$ALL_NEW_TIMES" | awk '{sum=0; count=0; for(i=1;i<=NF;i++){sum+=$i; count++}} END{if(count>0) printf "%.3f", sum/count; else print "0.000"}')
+          
+          # 计算沙箱复用测试平均时间
+          ALL_REUSE_TIMES=$(echo "$ALL_REUSE_TEST_TIMES" | tr '\n' ' ')
+          REUSE_AVG=$(echo "$ALL_REUSE_TIMES" | awk '{sum=0; count=0; for(i=1;i<=NF;i++){sum+=$i; count++}} END{if(count>0) printf "%.3f", sum/count; else print "0.000"}')
+          
+          echo "- 基准测试（滚动更新新Pod平均）: ${BASELINE_AVG}秒"
+          echo "- 沙箱复用测试（复用测试Pod平均）: ${REUSE_AVG}秒"
+          
+          # 计算性能提升
+          COMPARISON=$(echo "$BASELINE_AVG $REUSE_AVG" | awk '{
+            if ($1 > $2 && $1 > 0) {
+              improvement = $1 - $2
+              percent = int(improvement * 100 / $1)
+              printf "- ⚡ 性能提升: %.3f秒 (%d%%)", improvement, percent
+            } else if ($1 < $2) {
+              degradation = $2 - $1
+              percent = int(degradation * 100 / $1)
+              printf "- ⚠️  性能下降: %.3f秒 (%d%%)", degradation, percent
+            } else {
+              printf "- 📊 两次创建时间相同: %.3f秒", $1
+            }
+          }')
+          echo "$COMPARISON"
+          
+          # 设置变量供后续使用
+          FIRST_AVG="$BASELINE_AVG"
+          UPDATE_COUNT=$UPDATE_ITERATIONS
+        else
+          echo "  ⚠️ 没有收集到完整的测试数据"
+          FIRST_AVG="0.000"
+          REUSE_AVG="0.000"
+          echo "- 基准测试（滚动更新新Pod平均）: ${FIRST_AVG}秒"
+          echo "- 沙箱复用测试（复用测试Pod平均）: ${REUSE_AVG}秒"
+          echo "- 📊 无法计算性能提升（数据不足）"
+          UPDATE_COUNT=0
+        fi
+        
+        echo "- 沙箱复用覆盖率: ${TOTAL_REUSE_RATE}% (${SANDBOX_REUSE_COUNT}/${TOTAL_UPDATES}次Pod创建)"
+        echo "- 复用检测阈值: 20.0秒（沙箱复用标准阈值）"
+        
+        # 详细分析结论
+        ANALYSIS=$(echo "$FIRST_AVG $REUSE_AVG $TOTAL_REUSE_RATE" | awk '{
+          first=$1; reuse=$2; rate=$3;
+          if (rate > 80 && first > reuse) {
+            print "- 📝 结论: 沙箱复用效果显著，性能提升明显"
+          } else if (rate > 50 && first > reuse) {
+            print "- 📝 结论: 沙箱复用效果良好，有一定性能提升"
+          } else if (rate > 50) {
+            print "- 📝 结论: 沙箱复用率较高，但性能提升不明显"
+          } else if (rate > 20) {
+            print "- 📝 结论: 沙箱复用效果一般，建议检查节点配置"
+          } else {
+            print "- 📝 结论: 沙箱复用效果不佳，可能需要优化环境"
+          }
+        }')
+        echo "$ANALYSIS"
+        echo ""
+        
+        # 结论分析（安全的数值比较）
+        CONCLUSION_RESULT=$(python3 -c "
+        try:
+            rate = float('$TOTAL_REUSE_RATE')
+            if rate > 50:
+                print('excellent')
+            elif rate > 20:
+                print('moderate')
+            else:
+                print('poor')
+        except:
+            print('unknown')
+        " 2>/dev/null || echo "unknown")
+        
+        case "$CONCLUSION_RESULT" in
+            "excellent")
+                echo "✅ 结论: 滚动更新过程中沙箱复用效果显著"
+                ;;
+            "moderate")
+                echo "⚠️ 结论: 滚动更新过程中沙箱复用效果一般"
+                ;;
+            "poor")
+                echo "❌ 结论: 滚动更新过程中沙箱复用效果不明显"
+                ;;
+            *)
+                echo "❓ 结论: 无法分析沙箱复用效果"
+                ;;
+        esac
+        
+        # 发送企业微信通知（如果配置了webhook）
+        if [ -n "$WEBHOOK_URL" ] && [ "$WEBHOOK_URL" != "" ]; then
+          echo ""
+          echo "📱 发送企业微信通知..."
+          
+          # 构建通知消息
+          NOTIFICATION_MESSAGE="🔄 **TKE超级节点滚动更新沙箱复用测试报告**
+        
+        **📊 测试概览**
+        - 集群ID: $CLUSTER_ID
+        - 测试节点: $node_name
+        - Deployment: $DEPLOYMENT_NAME
+        - Pod副本数: $REPLICAS个
+        - 更新次数: $UPDATE_ITERATIONS次
+        - 总Pod创建次数: ${TOTAL_UPDATES}次
+        
+        **🔄 滚动更新性能**
+        - 平均更新时间: ${AVG_UPDATE_TIME}秒
+        - 最快更新时间: ${MIN_UPDATE_TIME}秒
+        - 最慢更新时间: ${MAX_UPDATE_TIME}秒
+        
+        **📈 沙箱复用效果分析**
+        - 基准测试（滚动更新新Pod平均）: ${FIRST_AVG}秒
+        - 沙箱复用测试（复用测试Pod平均）: ${REUSE_AVG}秒
+        - 沙箱复用覆盖率: ${TOTAL_REUSE_RATE}% (${SANDBOX_REUSE_COUNT}/${TOTAL_UPDATES}次Pod创建)
+        - 复用检测阈值: 20.0秒
+        
+        **🎯 测试结论**
+        $(case "$CONCLUSION_RESULT" in
+            "excellent") echo "✅ 滚动更新过程中沙箱复用效果显著" ;;
+            "moderate") echo "⚠️ 滚动更新过程中沙箱复用效果一般" ;;
+            "poor") echo "❌ 滚动更新过程中沙箱复用效果不明显" ;;
+            *) echo "❓ 无法分析沙箱复用效果" ;;
+        esac)
+        
+        **📅 测试时间**
+        - 开始时间: $(date '+%Y-%m-%d %H:%M:%S')
+        
+        \\n---\\n
+        *TKE Chaos Playbook 滚动更新测试*"
+          
+          # 发送通知
+          curl -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"msgtype\": \"markdown\",
+              \"markdown\": {
+                \"content\": \"$NOTIFICATION_MESSAGE\"
+              }
+            }" 2>/dev/null
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ 企业微信通知发送成功"
+          else
+            echo "❌ 企业微信通知发送失败"
+          fi
+        fi
+        
+        # 清理测试资源
+        echo ""
+        echo "🧹 清理测试资源..."
+        kubectl delete deployment $DEPLOYMENT_NAME -n $NAMESPACE --ignore-not-found=true
+        
+        if [ $? -eq 0 ]; then
+          echo "✅ 测试资源清理完成"
+        else
+          echo "⚠️ 测试资源清理可能不完整"
+        fi
+        
+        echo ""
+        echo "🎉 滚动更新沙箱复用测试完成！"
+        echo "========================================"

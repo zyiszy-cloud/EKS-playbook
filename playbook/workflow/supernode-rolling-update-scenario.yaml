@@ -1,0 +1,50 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: supernode-rolling-update-test-
+  namespace: tke-chaos-test
+  labels:
+    test-type: "rolling-update"
+    cluster-id: "tke-cluster"
+spec:
+  serviceAccountName: tke-chaos
+  entrypoint: rolling-update-sandbox-test
+  arguments:
+    parameters:
+    # 基础配置
+    - name: cluster-id
+      value: "tke-cluster"
+    - name: webhook-url
+      value: ""  # 设置企业微信webhook URL
+    - name: kubeconfig-secret-name
+      value: ""  # 如果使用外部集群，设置kubeconfig secret名称
+    - name: namespace
+      value: "tke-chaos-test"
+    
+    # 滚动更新配置
+    - name: deployment-name
+      value: "rolling-update-test"
+    - name: replicas
+      value: "3"  # Pod副本数
+    - name: initial-image
+      value: "nginx:1.20-alpine"  # 初始镜像
+    - name: updated-image
+      value: "nginx:1.21-alpine"  # 更新镜像
+    - name: update-iterations
+      value: "3"  # 滚动更新次数
+    - name: delay-between-updates
+      value: "30s"  # 更新间隔
+    
+    # 资源配置
+    - name: cpu-request
+      value: "100m"
+    - name: memory-request
+      value: "128Mi"
+    - name: cpu-limit
+      value: "200m"
+    - name: memory-limit
+      value: "256Mi"
+
+  workflowTemplateRef:
+    name: supernode-rolling-update-template
+    clusterScope: true

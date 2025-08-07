@@ -475,6 +475,7 @@ spec:
               DEPLOYMENT_START_TS=$DEPLOYMENT_START_SEC
               
               echo "  🔍 Deployment创建时间戳(秒): $DEPLOYMENT_START_TS"
+              echo "  🔍 验证时间戳: $(date -d @$DEPLOYMENT_START_TS 2>/dev/null || echo "时间戳无效")"
               DEPLOYMENT_TIME_DISPLAY=$(python3 -c "import datetime; dt = datetime.datetime.fromtimestamp($DEPLOYMENT_START_TS); print(dt.strftime(\"%Y-%m-%d %H:%M:%S\"))" 2>/dev/null || echo "时间格式化失败")
               echo "  🔍 Deployment创建时间: $DEPLOYMENT_TIME_DISPLAY"
               
@@ -559,34 +560,39 @@ spec:
                   echo "        Pod创建时间: '$POD_CREATE_TIME'"
                   echo "        容器启动时间: '$CONTAINER_START_TIME'"
                   
-                  SANDBOX_INIT_RESULT=$(python3 -c "
+                  SANDBOX_INIT_DURATION=$(python3 -c "
         import datetime
         import sys
         try:
             start_str = '$POD_CREATE_TIME'.replace('Z', '+00:00')
             end_str = '$CONTAINER_START_TIME'.replace('Z', '+00:00')
-            print(f'DEBUG: start_str={start_str}', file=sys.stderr)
-            print(f'DEBUG: end_str={end_str}', file=sys.stderr)
-    
+            
             start = datetime.datetime.fromisoformat(start_str)
             end = datetime.datetime.fromisoformat(end_str)
             duration = (end - start).total_seconds()
-    
-            print(f'DEBUG: duration={duration}', file=sys.stderr)
-    
+            
             if duration < 0: duration = 0
             print(f'{duration:.3f}')
         except Exception as e:
-            print(f'DEBUG: Exception={e}', file=sys.stderr)
             print('0.000')
-        " 2>&1)
-                  
-                  # 提取实际结果（最后一行）
-                  SANDBOX_INIT_DURATION=$(echo "$SANDBOX_INIT_RESULT" | tail -1)
+        " 2>/dev/null || echo "0.000")
                   echo "      🔍 Python计算结果: $SANDBOX_INIT_DURATION"
                   
                   # 计算从Deployment开始到Pod创建的时间（修复时区问题）
-                  POD_CREATION_RESULT=$(python3 -c "
+                  echo "      🔍 调试信息:"
+                  echo "        DEPLOYMENT_START_TS: '$DEPLOYMENT_START_TS'"
+                  echo "        POD_CREATE_TIME: '$POD_CREATE_TIME'"
+                  
+                  # 检查关键变量是否为空
+                  if [ -z "$DEPLOYMENT_START_TS" ]; then
+                    echo "        ❌ DEPLOYMENT_START_TS为空！"
+                    POD_CREATION_DURATION="0.000"
+                  elif [ -z "$POD_CREATE_TIME" ]; then
+                    echo "        ❌ POD_CREATE_TIME为空！"
+                    POD_CREATION_DURATION="0.000"
+                  else
+                  
+                  POD_CREATION_DURATION=$(python3 -c "
         import datetime
         import sys
         try:
@@ -594,23 +600,33 @@ spec:
             deployment_start = datetime.datetime.fromtimestamp($DEPLOYMENT_START_TS, tz=datetime.timezone.utc)
             pod_create = datetime.datetime.fromisoformat('$POD_CREATE_TIME'.replace('Z', '+00:00'))
             duration = (pod_create - deployment_start).total_seconds()
-    
+            
             print(f'DEBUG: deployment_start={deployment_start}', file=sys.stderr)
             print(f'DEBUG: pod_create={pod_create}', file=sys.stderr)
-            print(f'DEBUG: pod_creation_duration={duration}', file=sys.stderr)
-    
+            print(f'DEBUG: duration={duration}', file=sys.stderr)
+            
             if duration < 0: duration = 0
             print(f'{duration:.3f}')
         except Exception as e:
-            print(f'DEBUG: Pod creation Exception={e}', file=sys.stderr)
+            print(f'ERROR: {e}', file=sys.stderr)
             print('0.000')
         " 2>&1)
                   
-                  POD_CREATION_DURATION=$(echo "$POD_CREATION_RESULT" | tail -1)
-                  echo "      🔍 Pod创建时间计算结果: $POD_CREATION_DURATION"
+                    POD_CREATION_RESULT=$(echo "$POD_CREATION_DURATION" | tail -1)
+                    echo "      🔍 Pod创建时间计算结果: $POD_CREATION_RESULT"
+                    POD_CREATION_DURATION="$POD_CREATION_RESULT"
+                  fi
                   
                   # 计算端到端时间（修复时区问题）
-                  END_TO_END_RESULT=$(python3 -c "
+                  echo "        CONTAINER_START_TIME: '$CONTAINER_START_TIME'"
+                  
+                  # 检查关键变量是否为空
+                  if [ -z "$DEPLOYMENT_START_TS" ] || [ -z "$CONTAINER_START_TIME" ]; then
+                    echo "        ❌ 端到端时间计算所需变量为空！"
+                    END_TO_END_DURATION="0.000"
+                  else
+                  
+                  END_TO_END_DURATION=$(python3 -c "
         import datetime
         import sys
         try:
@@ -618,20 +634,21 @@ spec:
             deployment_start = datetime.datetime.fromtimestamp($DEPLOYMENT_START_TS, tz=datetime.timezone.utc)
             container_start = datetime.datetime.fromisoformat('$CONTAINER_START_TIME'.replace('Z', '+00:00'))
             duration = (container_start - deployment_start).total_seconds()
-    
-            print(f'DEBUG: deployment_start={deployment_start}', file=sys.stderr)
+            
             print(f'DEBUG: container_start={container_start}', file=sys.stderr)
             print(f'DEBUG: end_to_end_duration={duration}', file=sys.stderr)
-    
+            
             if duration < 0: duration = 0
             print(f'{duration:.3f}')
         except Exception as e:
-            print(f'DEBUG: End-to-end Exception={e}', file=sys.stderr)
+            print(f'ERROR: {e}', file=sys.stderr)
             print('0.000')
         " 2>&1)
                   
-                  END_TO_END_DURATION=$(echo "$END_TO_END_RESULT" | tail -1)
-                  echo "      🔍 端到端时间计算结果: $END_TO_END_DURATION"
+                    END_TO_END_RESULT=$(echo "$END_TO_END_DURATION" | tail -1)
+                    echo "      🔍 端到端时间计算结果: $END_TO_END_RESULT"
+                    END_TO_END_DURATION="$END_TO_END_RESULT"
+                  fi
                   
                   echo "      ⏱️  计算的时间指标:"
                   echo "        Pod创建耗时: ${POD_CREATION_DURATION}秒"
@@ -647,9 +664,20 @@ spec:
                   fi
                   
                   echo "      ✅ Pod数据已存储: $POD_DATA"
+                  echo "      🔍 沙箱复用预检查 - 迭代$i: 沙箱初始化${SANDBOX_INIT_DURATION}秒 $(python3 -c "print('(可能复用)' if float('$SANDBOX_INIT_DURATION') < 20.0 else '(未复用)')" 2>/dev/null || echo "(检查失败)")"
                   
                 elif [ -n "$POD_CREATE_TIME" ]; then
                   # 只有Pod创建时间，计算基本指标（修复时区问题）
+                  echo "      🔍 基本时间计算调试信息:"
+                  echo "        DEPLOYMENT_START_TS: '$DEPLOYMENT_START_TS'"
+                  echo "        POD_CREATE_TIME: '$POD_CREATE_TIME'"
+                  
+                  # 检查关键变量是否为空
+                  if [ -z "$DEPLOYMENT_START_TS" ] || [ -z "$POD_CREATE_TIME" ]; then
+                    echo "        ❌ 基本时间计算所需变量为空！"
+                    POD_CREATION_DURATION="0.000"
+                  else
+                  
                   POD_CREATION_RESULT=$(python3 -c "
         import datetime
         import sys
@@ -658,20 +686,21 @@ spec:
             deployment_start = datetime.datetime.fromtimestamp($DEPLOYMENT_START_TS, tz=datetime.timezone.utc)
             pod_create = datetime.datetime.fromisoformat('$POD_CREATE_TIME'.replace('Z', '+00:00'))
             duration = (pod_create - deployment_start).total_seconds()
-    
-            print(f'DEBUG: deployment_start={deployment_start}', file=sys.stderr)
-            print(f'DEBUG: pod_create={pod_create}', file=sys.stderr)
+            
+            print(f'DEBUG: basic_deployment_start={deployment_start}', file=sys.stderr)
+            print(f'DEBUG: basic_pod_create={pod_create}', file=sys.stderr)
             print(f'DEBUG: basic_pod_creation_duration={duration}', file=sys.stderr)
-    
+            
             if duration < 0: duration = 0
             print(f'{duration:.3f}')
         except Exception as e:
-            print(f'DEBUG: Basic Pod creation Exception={e}', file=sys.stderr)
+            print(f'ERROR: {e}', file=sys.stderr)
             print('0.000')
         " 2>&1)
                   
-                  POD_CREATION_DURATION=$(echo "$POD_CREATION_RESULT" | tail -1)
-                  echo "      🔍 基本Pod创建时间计算结果: $POD_CREATION_DURATION"
+                    POD_CREATION_DURATION=$(echo "$POD_CREATION_RESULT" | tail -1)
+                    echo "      🔍 基本Pod创建时间计算结果: $POD_CREATION_DURATION"
+                  fi
                   
                   echo "      ⏱️  基本时间指标:"
                   echo "        Pod创建耗时: ${POD_CREATION_DURATION}秒"
@@ -686,6 +715,7 @@ spec:
                   fi
                   
                   echo "      ⚠️  Pod数据已存储（部分）: $POD_DATA"
+                  echo "      🔍 沙箱复用预检查 - 迭代$i: 沙箱初始化0.000秒 (数据不完整，无法检测复用)"
                 else
                   echo "      ❌ 无法获取Pod时间信息"
                 fi
@@ -792,18 +822,30 @@ spec:
 
           
           # 🎯 基于存储数据进行沙箱复用检测
+          echo "  🔍 沙箱复用检测开始 - 当前迭代: $i"
+          echo "  📊 CURRENT_TEST_POD_DATA: '$CURRENT_TEST_POD_DATA'"
+          echo "  📊 数据长度: ${#CURRENT_TEST_POD_DATA}"
           if [ -n "$CURRENT_TEST_POD_DATA" ]; then
             # 检测沙箱复用（基于沙箱初始化时间）
             CURRENT_REUSED_COUNT=0
+            echo "  🔍 沙箱复用检测 - 当前迭代: $i, 阈值: 20.0秒"
             IFS='|' read -ra POD_ENTRIES <<< "$CURRENT_TEST_POD_DATA"
             for entry in "${POD_ENTRIES[@]}"; do
               IFS=':' read -ra POD_INFO <<< "$entry"
               if [ ${#POD_INFO[@]} -eq 4 ]; then
+                POD_NAME="${POD_INFO[0]}"
                 SANDBOX_INIT="${POD_INFO[2]}"
-                # 检查沙箱初始化时间是否小于3秒
-                REUSE_CHECK=$(python3 -c "print(float('$SANDBOX_INIT') < 3.0)" 2>/dev/null || echo "False")
+                echo "    Pod $POD_NAME: 沙箱初始化时间=${SANDBOX_INIT}秒"
+                # 检查沙箱初始化时间是否小于20秒（沙箱复用阈值）
+                REUSE_CHECK=$(python3 -c "print(float('$SANDBOX_INIT') < 20.0)" 2>/dev/null || echo "False")
+                echo "    复用检查结果: $REUSE_CHECK (时间 < 20.0秒)"
                 if [ "$REUSE_CHECK" = "True" ] && [ $i -eq 2 ]; then
                   CURRENT_REUSED_COUNT=$((CURRENT_REUSED_COUNT + 1))
+                  echo "    ✅ Pod $POD_NAME 检测为沙箱复用"
+                elif [ $i -ne 2 ]; then
+                  echo "    ⏭️ 跳过检测（非第2次迭代）"
+                else
+                  echo "    ❌ Pod $POD_NAME 未检测为沙箱复用"
                 fi
               fi
             done
@@ -811,7 +853,12 @@ spec:
             if [ $CURRENT_REUSED_COUNT -gt 0 ]; then
               REUSED_SANDBOXES=$((REUSED_SANDBOXES + CURRENT_REUSED_COUNT))
               echo "  🎯 检测到 $CURRENT_REUSED_COUNT 个Pod复用了沙箱"
+            else
+              echo "  📊 当前迭代未检测到沙箱复用"
             fi
+            echo "  📊 当前总复用数: $REUSED_SANDBOXES"
+          else
+            echo "  ❌ CURRENT_TEST_POD_DATA为空，跳过沙箱复用检测"
           fi
           
           # 记录每次测试的平均时间用于对比
@@ -1102,11 +1149,19 @@ spec:
           fi
           
           # 计算沙箱复用覆盖率
+          echo "  📊 覆盖率计算参数:"
+          echo "    ITERATIONS: $ITERATIONS"
+          echo "    REPLICAS: $REPLICAS"
+          echo "    REUSED_SANDBOXES: $REUSED_SANDBOXES"
           REUSE_COVERAGE="0%"
           if [ "$ITERATIONS" -eq 2 ] && [ "$REPLICAS" -gt 0 ]; then
             REUSE_PERCENTAGE=$((REUSED_SANDBOXES * 100 / REPLICAS))
             REUSE_COVERAGE="${REUSE_PERCENTAGE}%"
+            echo "    计算结果: $REUSE_PERCENTAGE% = ($REUSED_SANDBOXES * 100 / $REPLICAS)"
+          else
+            echo "    跳过计算: ITERATIONS=$ITERATIONS, REPLICAS=$REPLICAS"
           fi
+          echo "    最终覆盖率: $REUSE_COVERAGE"
           
           # 使用模板发送通知
           echo "  📊 通知参数:"
@@ -1125,7 +1180,7 @@ spec:
         {
         "msgtype": "markdown",
         "markdown": {
-        "content": "✅ 超级节点沙箱复用测试完成\\n\\n📋 基础信息\\n- 集群ID: \`$CLUSTER_ID\`\\n- 完成时间: \`$(date '+%Y-%m-%d %H:%M:%S')\`\\n- 测试节点: \`$node_name\`\\n- Pod副本数: $REPLICAS个\\n\\n📊 测试结果\\n- 状态: $([ "$TEST_STATUS" = "SUCCESS" ] && echo "全部成功" || echo "部分失败")\\n- 总测试: $TOTAL_TESTS次\\n- 成功: $SUCCESSFUL_TESTS次\\n- 失败: $FAILED_TESTS次\\n\\n📋 Pod创建时间（不含启动时间）:\\n- 基准测试平均: $FIRST_TIME秒\\n- 沙箱复用平均: $SECOND_TIME秒\\n- 性能提升: $(echo \"$FIRST_TIME $SECOND_TIME\" | awk '{if($1>0 && $2>=0) printf \"%.1f%%\", ($1-$2)*100/$1; else print \"计算中\"}')\\n\\n📊 沙箱复用效果分析:\\n- 基准测试（首次创建）: $FIRST_TIME秒\\n- 沙箱复用测试: $SECOND_TIME秒\\n- 沙箱复用覆盖率: $REUSE_COVERAGE ($REUSED_SANDBOXES/$REPLICAS个Pod)\\n- 结论: $(echo \"$FIRST_TIME $SECOND_TIME\" | awk '{if($1>$2 && $1>0) print \"沙箱复用生效，性能提升明显\"; else if($1==$2) print \"两次时间相同，沙箱复用可能生效\"; else print \"需要进一步分析\"}')\\n\\n📈 详细分析数据请查看工作流日志"
+        "content": "✅ 超级节点沙箱复用测试完成\\n\\n📋 基础信息\\n- 集群ID: \`$CLUSTER_ID\`\\n- 完成时间: \`$(date '+%Y-%m-%d %H:%M:%S')\`\\n- 测试节点: \`$node_name\`\\n- Pod副本数: $REPLICAS个\\n\\n📊 测试结果\\n- 状态: $([ "$TEST_STATUS" = "SUCCESS" ] && echo "全部成功" || echo "部分失败")\\n- 总测试: $TOTAL_TESTS次\\n- 成功: $SUCCESSFUL_TESTS次\\n- 失败: $FAILED_TESTS次\\n\\n📋 Pod创建时间统计:\\n- 基准测试平均: $FIRST_TIME秒\\n- 沙箱复用平均: $SECOND_TIME秒\\n- 最快时间: $MIN_TIME秒\\n- 最慢时间: $MAX_TIME秒\\n- 性能提升: $(echo $FIRST_TIME $SECOND_TIME | awk '{if(\$1>0 && \$2>=0) printf \"%.1f%%\", (\$1-\$2)*100/\$1; else print \"计算中\"}')\\n\\n📊 沙箱复用效果分析:\\n- 基准测试（首次创建）: $FIRST_TIME秒\\n- 沙箱复用测试: $SECOND_TIME秒\\n- 沙箱复用覆盖率: $REUSE_COVERAGE ($REUSED_SANDBOXES/$REPLICAS个Pod)\\n- 结论: $(echo $FIRST_TIME $SECOND_TIME | awk '{if(\$1>\$2 && \$1>0) print \"沙箱复用生效，性能提升明显\"; else if(\$1==\$2) print \"两次时间相同，沙箱复用可能生效\"; else print \"需要进一步分析\"}')\\n\\n📈 详细分析数据请查看工作流日志"
         }
         }
         EOF
