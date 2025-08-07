@@ -1,4 +1,4 @@
-# TKE Chaos Playbook
+# TKE Serverless Playbook
 
 腾讯云容器服务（TKE）超级节点沙箱复用性能测试工具。
 
