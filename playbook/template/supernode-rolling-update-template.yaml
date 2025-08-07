@@ -435,8 +435,46 @@ spec:
           echo "📊 开始沙箱复用测试..."
           echo "🔍 创建使用旧配置的Pod来测试沙箱复用效果..."
           
-          # 等待一段时间确保滚动更新完全稳定
-          sleep 5
+          # 🔑 关键：确保所有旧Pod完全删除，沙箱完全释放
+          echo "⏳ 确保所有旧Pod完全删除，沙箱完全释放..."
+          
+          # 等待所有Terminating状态的Pod完全消失
+          TERMINATING_PODS_COUNT=1
+          WAIT_COUNT=0
+          MAX_WAIT=60  # 最多等待60次，每次2秒，总共2分钟
+          
+          while [ $TERMINATING_PODS_COUNT -gt 0 ] && [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+            TERMINATING_PODS_COUNT=$(kubectl get pods -n $NAMESPACE --field-selector=status.phase=Terminating --no-headers 2>/dev/null | wc -l)
+            if [ $TERMINATING_PODS_COUNT -gt 0 ]; then
+              echo "  🔍 仍有 $TERMINATING_PODS_COUNT 个Pod在删除中，等待2秒..."
+              sleep 2
+              WAIT_COUNT=$((WAIT_COUNT + 1))
+            fi
+          done
+          
+          if [ $TERMINATING_PODS_COUNT -gt 0 ]; then
+            echo "  ⚠️ 等待超时，仍有Pod在删除中，但继续测试..."
+          else
+            echo "  ✅ 所有Pod删除完成"
+          fi
+          
+          # 额外等待时间确保沙箱资源完全释放
+          echo "⏳ 额外等待10秒确保沙箱资源完全释放..."
+          sleep 10
+          
+          # 验证目标节点上的Pod状态
+          echo "🔍 验证目标节点 $node_name 上的Pod状态..."
+          NODE_PODS=$(kubectl get pods --all-namespaces --field-selector spec.nodeName=$node_name --no-headers 2>/dev/null | wc -l)
+          echo "  📊 节点 $node_name 上当前运行的Pod数量: $NODE_PODS"
+          
+          # 检查是否有处于异常状态的Pod
+          ABNORMAL_PODS=$(kubectl get pods -n $NAMESPACE --field-selector spec.nodeName=$node_name --no-headers 2>/dev/null | grep -E "(Terminating|Pending|Unknown|Failed)" | wc -l)
+          if [ $ABNORMAL_PODS -gt 0 ]; then
+            echo "  ⚠️ 发现 $ABNORMAL_PODS 个异常状态的Pod，可能影响沙箱复用测试"
+            kubectl get pods -n $NAMESPACE --field-selector spec.nodeName=$node_name --no-headers 2>/dev/null | grep -E "(Terminating|Pending|Unknown|Failed)"
+          else
+            echo "  ✅ 节点状态正常，可以开始沙箱复用测试"
+          fi
           
           # 创建临时Deployment使用旧配置（用于测试沙箱复用）
           REUSE_TEST_NAME="${DEPLOYMENT_NAME}-reuse-test-${i}"
@@ -504,8 +542,19 @@ spec:
             continue
           fi
           
-          # 等待Pod稳定
-          sleep 3
+          # 等待Pod稳定并验证创建时间
+          echo "⏳ 等待Pod稳定并验证创建时间..."
+          sleep 5
+          
+          # 验证沙箱复用测试Pod是否在滚动更新完成后创建
+          echo "🔍 验证沙箱复用测试Pod的创建时间..."
+          REUSE_TEST_PODS_CREATED=$(kubectl get pods -n $NAMESPACE -l app=rolling-update-reuse-test,iteration=$i --no-headers -o custom-columns=CREATED:.metadata.creationTimestamp 2>/dev/null)
+          if [ -n "$REUSE_TEST_PODS_CREATED" ]; then
+            echo "  📊 沙箱复用测试Pod创建时间:"
+            echo "$REUSE_TEST_PODS_CREATED" | while read created_time; do
+              echo "    - $created_time"
+            done
+          fi
           
           # 获取沙箱复用测试Pod信息
           REUSE_TEST_PODS=$(kubectl get pods -n $NAMESPACE -l app=rolling-update-reuse-test,iteration=$i --no-headers -o custom-columns=NAME:.metadata.name,CREATED:.metadata.creationTimestamp)
