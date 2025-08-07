@@ -154,10 +154,41 @@ kubectl logs -l workflows.argoproj.io/workflow -n tke-chaos-test -f | grep "企�
 ## 📱 通知效果
 
 ### 测试开始通知
-![测试开始](https://via.placeholder.com/400x100/4CAF50/FFFFFF?text=🚀+测试开始通知)
+📊 超级节点沙箱复用测试开始
+📋 基础信息
+- 集群ID:   tke-cluster  
+- Pod副本数: 10个
+- 开始时间:   2025-08-07 08:57:21  
+🚀 测试配置
+- 测试类型: 沙箱复用性能测试
+- 测试策略: 基准测试 vs 沙箱复用测试
+- 预计耗时: 约2-5分钟
+📊 测试进行中，请稍候...
 
 ### 测试完成通知
-![测试完成](https://via.placeholder.com/400x200/2196F3/FFFFFF?text=📊+详细结果报告)
+✅ 超级节点沙箱复用测试完成
+📋 基础信息
+- 集群ID:   tke-cluster  
+- 完成时间:   2025-08-07 09:00:05  
+- 测试节点:   eklet-subnet-coaj153k-jwc0uafb  
+- Pod副本数: 10个
+📊 测试结果
+- 状态: 全部成功
+- 总测试: 2次
+- 成功: 2次
+- 失败: 0次
+📋 Pod创建时间统计:
+- 基准测试平均: 13.400秒
+- 沙箱复用平均: 14.400秒
+- 最快时间: 13.0秒
+- 最慢时间: 16.0秒
+- 性能提升: 
+📊 沙箱复用效果分析:
+- 基准测试（首次创建）: 13.400秒
+- 沙箱复用测试: 14.400秒
+- 沙箱复用覆盖率: 100% (10/10个Pod)
+- 结论: 
+📈 详细分析数据请查看工作流日志
 
 ## 🔒 安全建议
 
@@ -168,8 +199,7 @@ kubectl logs -l workflows.argoproj.io/workflow -n tke-chaos-test -f | grep "企�
 
 ## 📚 相关文档
 
-- [企业微信群机器人开发文档](https://developer.work.weixin.qq.com/document/path/91770)
-- [项目使用指南](USAGE.md)
-- [故障排查指南](USAGE_SIMPLE.md)
+- [企业微信群机器人开发文档](https://developer.work.weixin.qq.com/docum![Uploading 截屏2025-08-07 17.18.21.png…]()
+ent/path/91770)
 
 配置完成后，您将能够实时接收到TKE超级节点沙箱复用测试的详细结果通知！
