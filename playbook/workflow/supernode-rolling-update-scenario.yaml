@@ -15,7 +15,7 @@ spec:
     - name: cluster-id
       value: "tke-cluster"
     - name: webhook-url
-      value: ""  # 设置企业微信webhook URL
+      value: ""  # 请在此处填入你的企业微信webhook URL
     - name: kubeconfig-secret-name
       value: ""  # 如果使用外部集群，设置kubeconfig secret名称
     - name: namespace

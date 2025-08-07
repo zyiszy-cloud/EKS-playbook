@@ -85,4 +85,3 @@ kubectl get workflows -n tke-chaos-test -w
 - **Shell脚本**: 3个
 - **核心功能模块**: 5个
 
-项目已完成整理优化，结构清晰，功能完整，可直接用于生产环境部署和GitHub开源发布。

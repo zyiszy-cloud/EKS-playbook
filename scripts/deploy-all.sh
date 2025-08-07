@@ -82,7 +82,6 @@ show_help() {
     echo "  -w, --webhook       指定企业微信Webhook URL"
     echo "  -f, --force         强制重新部署"
     echo "  -s, --skip-test     跳过测试"
-    echo "  -q, --quick         快速部署模式"
     echo "  -i, --interactive   交互式配置模式"
     echo "  -wf, --workflow     指定工作流模板 (可选: ${SUPPORTED_WORKFLOWS[*]})"
     echo "  -l, --log-level     设置日志级别 (debug, info, warn, error, 默认: $LOG_LEVEL)"

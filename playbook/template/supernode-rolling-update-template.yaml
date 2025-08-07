@@ -66,7 +66,20 @@ spec:
       - name: memory-limit
       - name: webhook-url
     steps:
-    # 第一步：验证超级节点
+    # 第一步：发送测试开始通知
+    - - name: send-test-start-notification
+        template: send-rolling-update-start-notification
+        arguments:
+          parameters:
+          - name: cluster-id
+            value: "{{inputs.parameters.cluster-id}}"
+          - name: replicas
+            value: "{{inputs.parameters.replicas}}"
+          - name: webhook-url
+            value: "{{inputs.parameters.webhook-url}}"
+        when: "'{{inputs.parameters.webhook-url}}' != ''"
+    
+    # 第二步：验证超级节点
     - - name: verify-supernodes
         template: verify-supernodes
         arguments:
@@ -78,7 +91,7 @@ spec:
           - name: namespace
             value: "{{inputs.parameters.namespace}}"
     
-    # 第二步：运行滚动更新测试
+    # 第三步：运行滚动更新测试
     - - name: run-rolling-update-test
         template: run-rolling-update-test
         arguments:
@@ -957,4 +970,52 @@ spec:
         
         echo ""
         echo "🎉 滚动更新沙箱复用测试完成！"
-        echo "========================================"
+        echo "========================================" 
+ # 发送滚动更新测试开始通知模板
+  - name: send-rolling-update-start-notification
+    inputs:
+      parameters:
+      - name: cluster-id
+      - name: replicas
+      - name: webhook-url
+    script:
+      image: curlimages/curl:8.5.0
+      command: [sh]
+      source: |
+        echo "📨 发送滚动更新测试开始通知..."
+        
+        # 获取超级节点信息
+        SUPERNODES=$(kubectl get nodes -l node.kubernetes.io/instance-type=eklet --no-headers 2>/dev/null | awk '{print $1}' | head -1)
+        if [ -z "$SUPERNODES" ]; then
+          TEST_NODE="unknown"
+        else
+          TEST_NODE=$(echo $SUPERNODES | head -1)
+        fi
+        
+        # 构建滚动更新测试开始通知消息
+        NOTIFICATION_MESSAGE=$(cat <<EOF
+        {
+          "msgtype": "markdown",
+          "markdown": {
+            "content": "### 🔄 超级节点滚动更新沙箱复用测试开始\\n\\n**📋 基础信息**\\n- 集群ID: \`{{inputs.parameters.cluster-id}}\`\\n- 测试节点: \`$TEST_NODE\`\\n- Pod副本数: **{{inputs.parameters.replicas}}个**\\n- 开始时间: \`$(date '+%Y-%m-%d %H:%M:%S')\`\\n\\n**🚀 测试配置**\\n- 测试类型: 滚动更新沙箱复用测试\\n- 测试策略: 标准滚动更新 + 沙箱复用验证\\n- 预计耗时: 约3-8分钟\\n\\n> 🔄 滚动更新测试进行中，请稍候..."
+          }
+        }
+        EOF
+        )
+        
+        # 发送通知
+        RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+          -H "Content-Type: application/json" \
+          -d "$NOTIFICATION_MESSAGE" \
+          "{{inputs.parameters.webhook-url}}")
+        
+        HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+        RESPONSE_BODY=$(echo "$RESPONSE" | sed '$d')
+        
+        if [ "$HTTP_CODE" -eq 200 ]; then
+          echo "✅ 滚动更新测试开始通知发送成功"
+        else
+          echo "❌ 滚动更新测试开始通知发送失败"
+          echo "HTTP状态码: $HTTP_CODE"
+          echo "响应: $RESPONSE_BODY"
+        fi

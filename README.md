@@ -31,7 +31,7 @@ git clone <repository-url>
 cd tke-chaos-playbook
 
 # 2. 一键部署
-./scripts/deploy-all.sh -q
+./scripts/deploy-all.sh 
 
 # 3. 启动测试
 kubectl apply -f examples/basic-deployment-test.yaml
