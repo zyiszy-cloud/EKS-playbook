@@ -18,8 +18,10 @@
 
 ### 前置条件
 
-- Kubernetes集群（推荐TKE）
+- Kubernetes集群（推荐TKE）在集群中创建tke-chaos-test/tke-chaos-precheck-resource ConfigMap，该资源用于标识集群可执行演练测试
+- kubectl create ns tke-chaos-test && kubectl create -n tke-chaos-test configmap tke-chaos-precheck-resource --from-literal=empty=""
 - Argo Workflows已安装
+- 
 - kubectl命令行工具
 - 超级节点已配置
 
@@ -27,8 +29,15 @@
 
 ```bash
 # 1. 克隆项目
-git clone <repository-url>
+git clone git@github.com:wi1123/EKS-playbook.git
 cd tke-chaos-playbook
+# 部署Argo Workflow
+kubectl create -f playbook/install-argo.yaml
+# 验证Argo Workflow Pod正常运行
+kubectl get po -n tke-chaos-test
+#腾讯云TKE控制台开启tke-chaos-test/tke-chaos-argo-workflows-server Service公网访问，浏览器访问LoadBalancer IP:2746
+# 获取Argo Server UI接入凭证
+kubectl exec -it -n tke-chaos-test deployment/tke-chaos-argo-workflows-server -- argo auth token
 
 # 2. 一键部署
 ./scripts/deploy-all.sh 
