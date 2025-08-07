@@ -96,21 +96,43 @@ tke-chaos-playbook/
 
 ## 🔧 Configuration Options
 
-### Test Parameters
-- **replicas**: Number of Pod replicas (default: 3)
-- **test-iterations**: Number of test iterations (default: 2)
-- **delay-between-tests**: Interval between tests (default: 30s)
-- **pod-image**: Container image for testing (default: nginx:alpine)
+### Configuration Options
 
-### WeChat Work Notification
+#### Deployment Parameters
+```bash
+./scripts/deploy-all.sh [OPTIONS]
+  -n, --namespace NS      Specify namespace (default: tke-chaos-test)
+  -c, --cluster-id ID     Specify cluster ID (default: tke-cluster)
+  -r, --replicas NUM      Number of Pod replicas (default: 3)
+  -i, --image IMG         Specify Pod image (default: nginx:alpine)
+  -cpu, --cpu REQ/LIMIT   Specify CPU resources (request/limit, default: 100m/200m)
+  -mem, --memory REQ/LIMIT Specify memory resources (request/limit, default: 128Mi/256Mi)
+  -d, --delay DELAY       Specify test interval (default: 30s)
+  -it, --iterations NUM   Number of test iterations (default: 2)
+  -w, --webhook URL       WeChat Work webhook URL
+  -f, --force             Force redeployment
+  -s, --skip-test         Skip tests
+  -i, --interactive       Interactive configuration mode
+  -wf, --workflow NAME    Specify workflow template (options: supernode-sandbox-deployment-template, supernode-rolling-update-template)
+  -l, --log-level LEVEL   Set log level (debug, info, warn, error, default: info)
+  -h, --help              Show help information
+```
+
+#### WeChat Work Notification
 Configure WeChat Work webhook URL to receive test notifications:
+
 ```bash
 # Interactive configuration
-./scripts/deploy-all.sh --interactive
+./scripts/deploy-all.sh -i
 
 # Or specify webhook directly
 ./scripts/deploy-all.sh -w "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY"
+
+# Specify workflow template and configure webhook
+./scripts/deploy-all.sh -wf supernode-rolling-update-template -w "YOUR_WEBHOOK_URL"
 ```
+
+For detailed configuration guide, please refer to [WeChat Work Notification Setup](WECHAT_NOTIFICATION_SETUP.md)
 
 ## 📈 Test Results Example
 

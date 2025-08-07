@@ -24,7 +24,7 @@ https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY_HERE
 #### 方法1: 交互式配置
 ```bash
 # 运行部署脚本
-./scripts/deploy-all.sh
+./scripts/deploy-all.sh --interactive
 
 # 在交互过程中输入webhook URL
 ```
@@ -37,11 +37,18 @@ https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY_HERE
 
 #### 方法3: 快速部署配置
 ```bash
-# 快速模式配置
-./scripts/deploy-all.sh -q -w "YOUR_WEBHOOK_URL"
+# 快速模式配置 (非交互式)
+./scripts/deploy-all.sh -wf supernode-sandbox-deployment-template -w "YOUR_WEBHOOK_URL"
 ```
 
-### 3. 手动配置工作流
+### 3. 脚本参数说明
+
+部署脚本支持以下与通知相关的参数：
+- `-w, --webhook`: 指定企业微信Webhook URL
+- `-i, --interactive`: 进入交互式配置模式
+- `-wf, --workflow`: 指定工作流模板 (可选: supernode-sandbox-deployment-template, supernode-rolling-update-template)
+
+### 4. 手动配置工作流
 
 如果需要手动配置工作流文件：
 

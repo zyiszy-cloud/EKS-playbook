@@ -40,36 +40,6 @@ kubectl apply -f examples/basic-deployment-test.yaml
 kubectl get workflows -n tke-chaos-test -w
 ```
 
-### 测试场景
-
-```bash
-# 基础功能验证
-kubectl apply -f examples/basic-deployment-test.yaml
-
-# 精确沙箱复用测试
-kubectl apply -f examples/sandbox-reuse-precise-test.yaml
-
-# 滚动更新测试
-kubectl apply -f examples/rolling-update-test.yaml
-
-# 性能对比测试
-kubectl apply -f examples/performance-test.yaml
-```
-
-## 📁 项目结构
-
-```
-tke-chaos-playbook/
-├── playbook/                        # 核心工作流
-│   ├── template/                    # Argo Workflows模板
-│   └── workflow/                    # 工作流定义
-├── examples/                        # 测试示例
-├── scripts/                         # 部署脚本
-└── docs/                           # 文档
-```
-
-## 📊 测试指标
-
 ### 核心指标
 - **沙箱初始化时间**: 从Pod创建到容器启动的时间（核心指标）
 - **沙箱复用率**: 复用沙箱的Pod占比
@@ -89,21 +59,38 @@ tke-chaos-playbook/
 ### 部署参数
 ```bash
 ./scripts/deploy-all.sh [选项]
-  -i, --iterations NUM    测试迭代次数 (默认: 2)
-  -r, --replicas NUM      Pod副本数 (默认: 5)
-  -w, --webhook URL       企业微信webhook地址
-  -q, --quick             快速模式
-  --interactive           交互式配置模式
+  -n, --namespace NS      指定命名空间 (默认: tke-chaos-test)
+  -c, --cluster-id ID     指定集群ID (默认: tke-cluster)
+  -r, --replicas NUM      Pod副本数 (默认: 3)
+  -i, --image IMG         指定Pod镜像 (默认: nginx:alpine)
+  -cpu, --cpu REQ/LIMIT   指定CPU资源 (请求/限制，默认: 100m/200m)
+  -mem, --memory REQ/LIMIT 指定内存资源 (请求/限制，默认: 128Mi/256Mi)
+  -d, --delay DELAY       指定测试间隔 (默认: 30s)
+  -it, --iterations NUM   指定测试迭代次数 (默认: 2)
+  -w, --webhook URL       企业微信Webhook URL
+  -f, --force             强制重新部署
+  -s, --skip-test         跳过测试
+  -i, --interactive       交互式配置模式
+  -wf, --workflow NAME    指定工作流模板 (可选: supernode-sandbox-deployment-template, supernode-rolling-update-template)
+  -l, --log-level LEVEL   设置日志级别 (debug, info, warn, error, 默认: info)
+  -h, --help              显示帮助信息
 ```
 
 ### 企业微信通知
+配置企业微信webhook URL以接收测试结果通知：
+
 ```bash
 # 交互式配置（包含微信通知）
-./scripts/deploy-all.sh --interactive
+./scripts/deploy-all.sh -i
 
 # 或直接指定webhook
 ./scripts/deploy-all.sh -w "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY"
+
+# 指定工作流模板并配置webhook
+./scripts/deploy-all.sh -wf supernode-rolling-update-template -w "YOUR_WEBHOOK_URL"
 ```
+
+详细配置指南请参考 [企业微信通知设置](WECHAT_NOTIFICATION_SETUP.md)
 
 ## 🔧 测试场景详解
 
